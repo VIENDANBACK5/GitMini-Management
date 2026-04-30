@@ -73,19 +73,19 @@ SELECT * FROM commit_history LIMIT 50;
 
 ### 4.1. Truy vấn Commit History (Composite Index)
 *(Chèn ảnh kết quả Explain Analyze truy vấn Commit vào đây)*
-`![Minh chứng Commit History](../screenshots/05_explain_commit.png)`
+![Minh chứng Commit History](../screenshots/05_explain_commit.png)
 
 ### 4.2. Tìm kiếm Issue (GIN Index)
 *(Chèn ảnh kết quả Explain Analyze truy vấn Issue vào đây)*
-`![Minh chứng Issue Search](../screenshots/05_explain_issue.png)`
+![Minh chứng Issue Search](../screenshots/05_explain_issue.png)
 
 ### 4.3. Duyệt cây Commit (Recursive CTE)
 *(Chèn ảnh kết quả Explain Analyze truy vấn CTE vào đây)*
-`![Minh chứng Recursive CTE](../screenshots/05_explain_cte.png)`
+![Minh chứng Recursive CTE](../screenshots/05_explain_cte.png)
 
 ### 4.4. Truy xuất Thống kê Dashboard (Trigger)
 *(Chèn ảnh kết quả Explain Analyze truy vấn Repo Stats vào đây)*
-`![Minh chứng Repo Stats](../screenshots/05_explain_stats.png)`
+![Minh chứng Repo Stats](../screenshots/05_explain_stats.png)
 
 ---
 
