@@ -49,12 +49,6 @@ CREATE POLICY repo_member_access_policy ON repo_members
     USING (
         current_setting('app.current_username', true) = 'admin'
         OR user_id::text = current_setting('app.current_user_id', true)
-        OR EXISTS (
-            SELECT 1
-            FROM repositories r
-            WHERE r.id = repo_members.repo_id
-              AND r.owner_id::text = current_setting('app.current_user_id', true)
-        )
     );
 
 -- 4. Chính sách cho bảng COMMITS
