@@ -22,27 +22,40 @@ scripts/seed_data.py
 
 ---
 
-## 2. Thứ tự chạy script khởi tạo
+## 2. Các đoạn lệnh khởi tạo (Migration Up/Down)
 
-Khi dựng database mới, cần chạy theo thứ tự sau:
+Hệ thống sử dụng cơ chế migration bằng script SQL thuần để đảm bảo tính minh bạch và dễ dàng kiểm soát trong PostgreSQL.
+
+### 2.1. Migration Up (Khởi tạo và Cập nhật)
+Đây là các script dùng để xây dựng cấu trúc database từ đầu:
 
 | Thứ tự | Script | Mục đích |
 |---:|---|---|
-| 1 | `sql/01_schema.sql` | Tạo extension và 11 bảng nền tảng |
-| 2 | `sql/02_indexes.sql` | Tạo index phục vụ truy vấn và tìm kiếm |
-| 3 | `sql/03_triggers.sql` | Tạo function và trigger cập nhật `repo_stats` |
-| 4 | `sql/04_security_roles.sql` | Tạo role và phân quyền RBAC |
-| 5 | `sql/05_security_rls.sql` | Bật Row-Level Security và tạo policy |
-| 6 | `sql/08_phase4_pr_governance.sql` | Bổ sung bảng approval PR |
-| 7 | `sql/09_extend_to_20_tables.sql` | Bổ sung 9 bảng mở rộng để đủ 20 bảng CSDL |
-| 8 | `scripts/seed_data.py` | Sinh dữ liệu mẫu phục vụ demo/benchmark cho cả schema 20 bảng |
-| Thủ công | `sql/00_down.sql` | Rollback schema khi cần reset môi trường |
-| Thủ công | `sql/06_benchmark_queries.sql` | Chạy `EXPLAIN ANALYZE` sau khi có dữ liệu seed |
-| Thủ công | `sql/07_analytics_queries.sql` | Chạy truy vấn analytics phục vụ báo cáo |
+| 1 | `sql/01_schema.sql` | Khởi tạo extension `uuid-ossp` và 11 bảng lõi. |
+| 2 | `sql/02_indexes.sql` | Tạo hệ thống chỉ mục (B-tree, GIN) để tối ưu truy vấn. |
+| 3 | `sql/03_triggers.sql` | Thiết lập trigger tự động hóa cập nhật bảng phi chuẩn hóa. |
+| 4 | `sql/04_security_roles.sql` | Thiết lập RBAC (Role-based Access Control). |
+| 5 | `sql/05_security_rls.sql` | Kích hoạt và cấu hình Row-Level Security. |
+| 6 | `sql/08_phase4_pr_governance.sql` | Bổ sung cơ chế xét duyệt PR. |
+| 7 | `sql/09_extend_to_20_tables.sql` | Mở rộng schema lên 20 bảng hoàn thiện nghiệp vụ. |
+
+### 2.2. Migration Down (Rollback/Reset)
+Dùng để reset môi trường hoặc gỡ bỏ các thành phần đã cài đặt:
+
+| Script | Mục đích |
+|---|---|
+| `sql/00_down.sql` | Xóa toàn bộ policy, trigger, function, bảng, role và extension. |
 
 ---
+## 3. Seed dữ liệu mẫu (Seeding)
+Sau khi khởi tạo cấu trúc, hệ thống cung cấp script Python để sinh dữ liệu thực tế, phục vụ demo và đo đạc hiệu năng.
 
-## 3. Migration Up
+*   **Script:** `scripts/seed_data.py`
+*   **Chế độ `demo`:** Sinh ~1,000 commit, ~300 issue (chạy nhanh).
+*   **Chế độ `benchmark`:** Sinh ~100,000 commit, ~10,000 issue (đo hiệu năng).
+
+---
+## 4. Minh chứng thực tế chạy script
 
 Migration up là quá trình tạo hoặc cập nhật cấu trúc CSDL từ trạng thái rỗng lên trạng thái có thể sử dụng.
 
@@ -280,28 +293,6 @@ pip install psycopg2-binary python-dotenv
 
 ---
 
-## 8. Nhật ký khởi tạo thực tế (Implementation Log)
-
-Dưới đây là trích xuất log khi nhóm thực hiện reset và khởi tạo lại database phục vụ buổi demo cuối:
-
-```text
-$ docker compose up -d db
-[+] Running 1/1
- ⠿ Container gitmini_db_container  Started
-
-$ python scripts/seed_data.py --profile demo
-[2026-04-30 22:15:10] INFO: Connecting to PostgreSQL at localhost:5435...
-[2026-04-30 22:15:11] INFO: Successfully connected.
-[2026-04-30 22:15:11] INFO: Seeding 100 users... [DONE]
-[2026-04-30 22:15:12] INFO: Seeding 20 repositories... [DONE]
-[2026-04-30 22:15:13] INFO: Seeding 1,000 commits with DAG parents... [DONE]
-[2026-04-30 22:15:15] INFO: Seeding 300 issues and 80 pull requests... [DONE]
-[2026-04-30 22:15:16] INFO: Seeding extended tables (FileBlobs, Tags, CI Runs)... [DONE]
-[2026-04-30 22:15:17] INFO: Database seeding completed successfully.
-```
-
----
-
-## 9. Kết luận
+## 7. Kết luận
 
 Project đã có migration up/down, benchmark query và seed script hỗ trợ cả demo mode lẫn benchmark mode. Sau khi chạy `--profile benchmark`, có thể dùng `sql/06_benchmark_queries.sql` để lấy số liệu `EXPLAIN ANALYZE` điền vào tài liệu minh chứng tối ưu.

@@ -297,5 +297,15 @@ Toàn bộ lược đồ GitMini gồm 7 quan hệ nghiệp vụ (users, reposit
 Trường hợp ngoại lệ duy nhất là bảng repo_stats — vi phạm 3NF có chủ ý theo kỹ thuật Controlled Denormalization. Quyết định này được đưa ra có cơ sở kỹ thuật rõ ràng, với cơ chế TRIGGER đảm bảo tính nhất quán trong giao dịch. Đây là minh chứng cho quan điểm thiết kế cơ sở dữ liệu thực tế: chuẩn hóa là nguyên tắc nền tảng, nhưng không phải là mục tiêu tuyệt đối — cần đánh đổi có lý khi đòi hỏi hiệu năng đặt ra yêu cầu bắt buộc.
 
 
+PHẦN C — Lược đồ Vật lý và Data Dictionary
+
+C.1. Lược đồ Vật lý
+Lược đồ vật lý chuyển đổi các kiểu dữ liệu logic sang các kiểu dữ liệu cụ thể của PostgreSQL (như `UUID`, `CHAR(40)`, `TIMESTAMPTZ`, `JSONB`) và thiết kế các cơ chế lưu trữ, chỉ mục để tối ưu hiệu năng. Chi tiết về lược đồ vật lý được trình bày trong tài liệu [Data Dictionary](02c_data_dictionary.md).
+
+C.2. Data Dictionary
+Hệ thống bao gồm 20 bảng với định nghĩa chi tiết về cột, kiểu dữ liệu, ràng buộc và mục đích nghiệp vụ.
+*   **Danh sách 20 bảng:** `users`, `repositories`, `repo_members`, `commits`, `commit_parents`, `branches`, `issues`, `pull_requests`, `pull_request_reviews`, `audit_logs`, `repo_stats`, `file_blobs`, `commit_files`, `repository_languages`, `tags`, `releases`, `issue_comments`, `pull_request_comments`, `ci_runs`, `backup_jobs`.
+
+---
 GitMini — Báo cáo Bài tập lớn | Quản trị Cơ sở Dữ liệu Nâng cao
 

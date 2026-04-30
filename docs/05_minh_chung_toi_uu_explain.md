@@ -40,9 +40,9 @@ Thông tin mẫu dùng để đo:
 
 | Trường | Giá trị |
 |---|---|
-| `repo_id` | `7c44c15e-fe97-49fe-879f-71ddd9c9ba10` |
-| Repository | `gitmini-management-system` |
-| Commit dùng cho Recursive CTE | `d8417c6b8d6300918de55730116dbbe1f29c3da6` |
+| `repo_id` | `f98e97b7-df9a-4b91-9386-e5bec66bdb4c` |
+| Repository | `project_0` |
+| Commit dùng cho Recursive CTE | `a648a7eef103bb7f2b96fd7a6f39e3607955940a` |
 
 Script `scripts/seed_data.py` hiện hỗ trợ profile `benchmark` để tạo dữ liệu lớn:
 
@@ -457,25 +457,7 @@ Bảng này tổng hợp kết quả chạy trên database benchmark sạch củ
 
 ---
 
-## 11. Nhật ký đo đạc hệ thống (System Benchmark Log)
-
-Dưới đây là trích xuất log thực tế khi nhóm chạy script đo đạc hiệu năng tại lab:
-
-```text
-[2026-04-30 14:12:07] INFO: Starting benchmark for GitMini DB...
-[2026-04-30 14:12:08] INFO: Database gitmini_db found on localhost:5435
-[2026-04-30 14:12:08] INFO: Running 'EXPLAIN ANALYZE' for Commit History (Composite Index)...
-[2026-04-30 14:12:08] DEBUG: Query: SELECT commit_hash FROM commits WHERE repo_id = '7c44c15e...' ORDER BY created_at DESC LIMIT 20;
-[2026-04-30 14:12:08] SUCCESS: Execution Time: 0.043 ms (Index Scan)
-[2026-04-30 14:12:09] INFO: Running 'EXPLAIN ANALYZE' for Full-Text Search (GIN)...
-[2026-04-30 14:12:09] DEBUG: Query: SELECT id FROM issues WHERE tsvector @@ tsquery('login bug');
-[2026-04-30 14:12:10] SUCCESS: Execution Time: 0.450 ms (Bitmap Index Scan)
-[2026-04-30 14:12:11] INFO: Benchmark completed. All metrics within optimization targets.
-```
-
----
-
-## 12. Kết luận
+## 10. Kết luận
 
 Phase 5 đã được chạy trên database benchmark sạch với 1,000 users, 1,000 repositories, 100,000 commits, 10,000 issues và 2,000 pull requests. Kết quả `EXPLAIN ANALYZE` cho thấy các index và cấu trúc tối ưu của GitMini có tác dụng rõ ràng:
 

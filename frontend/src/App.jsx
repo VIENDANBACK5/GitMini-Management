@@ -1,20 +1,56 @@
 import { useEffect, useState } from 'react';
 import {
+  Alert,
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  Col,
+  Dropdown,
+  Empty,
+  Form,
+  Input,
+  Layout,
+  List,
+  Menu,
+  Modal,
+  Row,
+  Select,
+  Space,
+  Spin,
+  Statistic,
+  Table,
+  Tag,
+  Timeline,
+  Tooltip,
+  Typography,
+} from 'antd';
+import {
   AlertCircle,
   ArrowLeft,
   BarChart3,
   Book,
   Clock,
+  Database,
   GitBranch,
   GitCommit,
   GitPullRequest,
   LayoutDashboard,
   Lock,
+  LogOut,
   Plus,
   Search,
+  ShieldCheck,
   User,
 } from 'lucide-react';
 import { api, demoUsers, login, logout } from './api.js';
+
+const { Header, Sider, Content } = Layout;
+const { Text, Title, Paragraph } = Typography;
+const { TextArea, Password, Search: SearchInput } = Input;
+
+const repoRoles = ['owner', 'maintainer', 'developer', 'reviewer', 'viewer'];
 
 function formatDate(value) {
   if (!value) return 'N/A';
@@ -28,27 +64,12 @@ function formatMetadata(metadata) {
     .join(' · ');
 }
 
-function StatusBadge({ status }) {
-  return <span className={`badge status-${status}`}>{status}</span>;
-}
-
-function RoleBadge({ role }) {
-  if (!role) return null;
-  return <span className={`badge role-${role}`}>{role}</span>;
-}
-
-function EmptyState({ message }) {
-  return <div className="empty-state glass">{message}</div>;
-}
-
 function mergeBlockedReason(reason) {
-  if (reason === 'protected_branch_requires_approval') return 'protected branch requires reviewer approval';
-  if (reason === 'insufficient_role') return 'merge requires owner/maintainer';
-  if (reason === 'not_open') return 'pull request is not open';
-  return 'merge is blocked';
+  if (reason === 'protected_branch_requires_approval') return 'Protected branch requires reviewer approval';
+  if (reason === 'insufficient_role') return 'Merge requires owner or maintainer';
+  if (reason === 'not_open') return 'Pull request is not open';
+  return 'Merge is blocked';
 }
-
-const repoRoles = ['owner', 'maintainer', 'developer', 'reviewer', 'viewer'];
 
 function canViewMembers(role) {
   return ['admin', 'owner', 'maintainer'].includes(role);
@@ -58,25 +79,43 @@ function canManageMembers(role) {
   return ['admin', 'owner'].includes(role);
 }
 
-function SectionHeader({ title, selectedRepo, children }) {
+function statusColor(status) {
+  if (status === 'open' || status === 'success') return 'green';
+  if (status === 'closed' || status === 'failed') return 'red';
+  if (status === 'merged' || status === 'approved') return 'purple';
+  if (status === 'running' || status === 'queued') return 'blue';
+  return 'default';
+}
+
+function roleColor(role) {
+  if (role === 'admin' || role === 'owner') return 'gold';
+  if (role === 'maintainer') return 'cyan';
+  if (role === 'developer') return 'blue';
+  if (role === 'reviewer') return 'purple';
+  if (role === 'viewer') return 'default';
+  return 'default';
+}
+
+function StatusTag({ status }) {
+  return status ? <Tag color={statusColor(status)}>{status}</Tag> : null;
+}
+
+function RoleTag({ role }) {
+  return role ? <Tag color={roleColor(role)}>{role}</Tag> : null;
+}
+
+function Icon({ children }) {
+  return <span className="menu-icon">{children}</span>;
+}
+
+function SectionHeader({ title, subtitle, selectedRepo, children }) {
   return (
     <div className="section-header">
       <div>
-        <h2>{title}</h2>
-        {selectedRepo ? <p>Repository: {selectedRepo}</p> : null}
+        <Title level={2}>{title}</Title>
+        <Text type="secondary">{selectedRepo ? `Repository: ${selectedRepo}` : subtitle}</Text>
       </div>
-      <div className="section-actions">{children}</div>
-    </div>
-  );
-}
-
-function Modal({ title, children, onClose }) {
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal glass" onClick={(event) => event.stopPropagation()}>
-        <h2>{title}</h2>
-        {children}
-      </div>
+      {children ? <Space wrap>{children}</Space> : null}
     </div>
   );
 }
@@ -95,6 +134,7 @@ export default function App() {
   const [repoCapabilities, setRepoCapabilities] = useState({});
   const [members, setMembers] = useState([]);
   const [memberError, setMemberError] = useState('');
+  const [memberForm] = Form.useForm();
   const selectedRepoCapability = selectedRepo ? repoCapabilities[selectedRepo] : null;
   const selectedRepoRole = selectedRepoCapability?.current_user_role;
   const mayViewMembers = canViewMembers(selectedRepoRole);
@@ -185,16 +225,11 @@ export default function App() {
     setError('');
   }
 
-  async function handleLogin(event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const username = form.elements.username.value;
-    const password = form.elements.password.value;
-
+  async function handleLogin(values) {
     setLoading(true);
     setLoginError('');
     try {
-      setMe(await login(username, password));
+      setMe(await login(values.username, values.password || ''));
       resetAppState();
     } catch (err) {
       setLoginError(err.message);
@@ -219,10 +254,8 @@ export default function App() {
     setView('history');
   }
 
-  async function handleSearch(event) {
-    if (event.key !== 'Enter') return;
-
-    const q = event.currentTarget.value.trim();
+  async function handleSearch(value) {
+    const q = value.trim();
     if (!q) {
       load();
       return;
@@ -245,37 +278,32 @@ export default function App() {
     }
   }
 
-  async function createRepo(event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const name = form.elements.name.value.trim();
-    if (!name) return;
+  async function createRepo(values) {
+    if (!values.name?.trim()) return;
 
     await api('/repos', 'POST', {
-      name,
-      description: form.elements.description.value.trim(),
-      is_private: form.elements.isPrivate.checked,
+      name: values.name.trim(),
+      description: values.description?.trim() || '',
+      is_private: Boolean(values.isPrivate),
     });
     setModal(null);
     setView('repos');
     await load('repos', selectedRepo);
   }
 
-  async function createIssue(event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const repo = form.elements.repo.value.trim();
-    const title = form.elements.title.value.trim();
+  async function createIssue(values) {
+    const repo = values.repo?.trim();
+    const title = values.title?.trim();
     if (!repo || !title) return;
 
-    const labels = form.elements.labels.value
+    const labels = (values.labels || '')
       .split(',')
       .map((label) => label.trim())
       .filter(Boolean);
 
     await api(`/repos/${encodeURIComponent(repo)}/issues`, 'POST', {
       title,
-      body: form.elements.body.value.trim(),
+      body: values.body?.trim() || '',
       labels,
     });
     setModal(null);
@@ -283,18 +311,16 @@ export default function App() {
     await load('issues', selectedRepo);
   }
 
-  async function createPull(event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const repo = form.elements.repo.value.trim();
-    const title = form.elements.title.value.trim();
-    const source = form.elements.source.value.trim();
-    const target = form.elements.target.value.trim();
+  async function createPull(values) {
+    const repo = values.repo?.trim();
+    const title = values.title?.trim();
+    const source = values.source?.trim();
+    const target = values.target?.trim();
     if (!repo || !title || !source || !target) return;
 
     await api(`/repos/${encodeURIComponent(repo)}/pulls`, 'POST', {
       title,
-      body: form.elements.body.value.trim(),
+      body: values.body?.trim() || '',
       source_branch: source,
       target_branch: target,
     });
@@ -318,19 +344,16 @@ export default function App() {
     await load('pulls', selectedRepo);
   }
 
-  async function addMember(event) {
-    event.preventDefault();
+  async function addMember(values) {
     if (!selectedRepo || !mayManageMembers) return;
 
-    const form = event.currentTarget;
-    const username = form.elements.username.value.trim();
-    const role = form.elements.role.value;
+    const username = values.username?.trim();
     if (!username) return;
 
     try {
       setMemberError('');
-      await api(`/repos/${encodeURIComponent(selectedRepo)}/members`, 'POST', { username, role });
-      form.reset();
+      await api(`/repos/${encodeURIComponent(selectedRepo)}/members`, 'POST', { username, role: values.role });
+      memberForm.resetFields();
       await loadMembers(selectedRepo);
     } catch (err) {
       setMemberError(err.message);
@@ -372,398 +395,350 @@ export default function App() {
   }
 
   if (!authChecked) {
-    return <div className="app-container"><div className="loading">Checking session...</div></div>;
+    return (
+      <div className="login-shell">
+        <Spin size="large" tip="Checking session..." />
+      </div>
+    );
   }
 
   if (!me) {
     return renderLogin();
   }
 
+  const menuItems = [
+    { key: 'repos', icon: <Icon><LayoutDashboard size={18} /></Icon>, label: 'Repositories' },
+    { key: 'issues', icon: <Icon><AlertCircle size={18} /></Icon>, label: 'Global Issues' },
+    { key: 'pulls', icon: <Icon><GitPullRequest size={18} /></Icon>, label: 'Pull Requests' },
+    { key: 'analytics', icon: <Icon><BarChart3 size={18} /></Icon>, label: 'Analytics' },
+    me.system_role === 'admin'
+      ? { key: 'audit', icon: <Icon><Lock size={18} /></Icon>, label: 'Audit Logs' }
+      : null,
+  ].filter(Boolean);
+
+  const selectedMenuKey = ['history', 'search'].includes(view) ? 'repos' : view;
+
   return (
-    <div className="app-container">
-      <aside className="sidebar">
-        <div className="logo">
-          <GitBranch />
-          <div className="logo-copy">
-            <span>GitMini</span>
-            <small>SQL-first SCM</small>
+    <Layout className="app-shell">
+      <Sider width={280} breakpoint="lg" collapsedWidth="0" className="app-sider">
+        <div className="brand-block">
+          <div className="brand-mark"><GitBranch size={24} /></div>
+          <div>
+            <Title level={4}>GitMini</Title>
+            <Text type="secondary">SQL-first SCM</Text>
           </div>
         </div>
-        <nav>
-          <button className={`nav-item ${view === 'repos' || view === 'history' || view === 'search' ? 'active' : ''}`} onClick={() => showSection('repos')}>
-            <LayoutDashboard />
-            <span>Repositories</span>
-          </button>
-          <button className={`nav-item ${view === 'issues' ? 'active' : ''}`} onClick={() => showSection('issues')}>
-            <AlertCircle />
-            <span>Global Issues</span>
-          </button>
-          <button className={`nav-item ${view === 'pulls' ? 'active' : ''}`} onClick={() => showSection('pulls')}>
-            <GitPullRequest />
-            <span>Pull Requests</span>
-          </button>
-          <button className={`nav-item ${view === 'analytics' ? 'active' : ''}`} onClick={() => showSection('analytics')}>
-            <BarChart3 />
-            <span>Analytics</span>
-          </button>
-          {me.system_role === 'admin' ? (
-            <button className={`nav-item ${view === 'audit' ? 'active' : ''}`} onClick={() => showSection('audit')}>
-              <Lock />
-              <span>Audit Logs</span>
-            </button>
-          ) : null}
-        </nav>
-        <div className="user-profile">
-          <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${me.username}`} alt="avatar" />
-          <div className="user-info">
-            <span className="username">{me.username}</span>
-            <span className="status">{me.system_role || 'user'}</span>
-          </div>
-          <button className="btn-secondary logout-button" onClick={handleLogout}>Logout</button>
-        </div>
-      </aside>
 
-      <main className="main-content">
-        <header className="top-bar">
-          <div className="search-container">
-            <Search />
-            <input type="text" placeholder="Search commits/issues (GIN Index)..." onKeyUp={handleSearch} />
-          </div>
-          <div className="actions">
-            <span className="demo-pill">PostgreSQL + FastAPI + React</span>
-            <button className="btn-primary" onClick={() => setModal('repo')}>
-              <Plus /> New Repo
-            </button>
-          </div>
-        </header>
+        <Menu
+          mode="inline"
+          selectedKeys={[selectedMenuKey]}
+          items={menuItems}
+          onClick={({ key }) => showSection(key)}
+          className="app-menu"
+        />
 
-        <section id="content-area">
-          {loading ? <div className="loading">Fetching data from SQL...</div> : null}
-          {error ? <div className="error">Error: {error}</div> : null}
+        <Card className="operator-card" size="small">
+          <Space align="center">
+            <Avatar>{me.username.slice(0, 1).toUpperCase()}</Avatar>
+            <div className="operator-info">
+              <Text strong>{me.username}</Text>
+              <RoleTag role={me.system_role || 'user'} />
+            </div>
+          </Space>
+          <Button block icon={<LogOut size={16} />} onClick={handleLogout}>Logout</Button>
+        </Card>
+      </Sider>
+
+      <Layout className="workspace">
+        <Header className="top-header">
+          <SearchInput
+            allowClear
+            size="large"
+            prefix={<Search size={16} />}
+            placeholder="Search commits/issues with PostgreSQL GIN index..."
+            onSearch={handleSearch}
+            className="global-search"
+          />
+          <Space wrap className="top-actions">
+            <Tag color="blue" icon={<Database size={14} />}>PostgreSQL 20 tables</Tag>
+            <Button type="primary" icon={<Plus size={16} />} onClick={() => setModal('repo')}>New Repo</Button>
+          </Space>
+        </Header>
+
+        <Content className="content-shell">
+          {loading ? <Card><Spin tip="Fetching data from SQL..." /></Card> : null}
+          {error ? <Alert type="error" showIcon message="Request failed" description={error} className="content-alert" /> : null}
           {!loading && !error ? renderContent() : null}
-        </section>
-      </main>
+        </Content>
+      </Layout>
 
-      {modal === 'repo' ? (
-        <Modal title="Create New Repository" onClose={() => setModal(null)}>
-          <form className="form-stack" onSubmit={createRepo}>
-            <input name="name" type="text" placeholder="Repository name" />
-            <textarea name="description" placeholder="Description" />
-            <label className="checkbox-row">
-              <input name="isPrivate" type="checkbox" />
-              Private repository
-            </label>
-            <button className="btn-primary" type="submit">Create Now</button>
-          </form>
-        </Modal>
-      ) : null}
-
-      {modal === 'issue' ? (
-        <Modal title="Create Issue" onClose={() => setModal(null)}>
-          {selectedRepoCapability && !selectedRepoCapability.can_create_issue ? <p className="disabled-hint">Current role cannot create issues in this repository.</p> : null}
-          <form className="form-stack" onSubmit={createIssue}>
-            <input name="repo" type="text" placeholder="Repository name" defaultValue={selectedRepo || ''} />
-            <input name="title" type="text" placeholder="Issue title" />
-            <textarea name="body" placeholder="Description" />
-            <input name="labels" type="text" placeholder="Labels, comma separated" />
-            <button className="btn-primary" type="submit">Create Issue</button>
-          </form>
-        </Modal>
-      ) : null}
-
-      {modal === 'pull' ? (
-        <Modal title="Create Pull Request" onClose={() => setModal(null)}>
-          {selectedRepoCapability && !selectedRepoCapability.can_create_pull ? <p className="disabled-hint">Current role cannot create pull requests in this repository.</p> : null}
-          <form className="form-stack" onSubmit={createPull}>
-            <input name="repo" type="text" placeholder="Repository name" defaultValue={selectedRepo || ''} />
-            <input name="title" type="text" placeholder="Pull request title" />
-            <input name="source" type="text" placeholder="Source branch" defaultValue="feature/demo" />
-            <input name="target" type="text" placeholder="Target branch" defaultValue="main" />
-            <textarea name="body" placeholder="Description" />
-            <button className="btn-primary" type="submit">Create Pull Request</button>
-          </form>
-        </Modal>
-      ) : null}
-    </div>
+      {renderModals()}
+    </Layout>
   );
 
   function renderLogin() {
     return (
       <div className="login-shell">
-        <div className="login-card glass">
-          <div className="logo login-logo">
-            <GitBranch />
-            <div className="logo-copy">
-              <span>GitMini</span>
-              <small>SQL-first SCM</small>
+        <Card className="login-card">
+          <div className="login-brand">
+            <div className="brand-mark"><GitBranch size={28} /></div>
+            <div>
+              <Title level={2}>GitMini Console</Title>
+              <Text type="secondary">Professional database administration demo</Text>
             </div>
           </div>
-          <h1>Sign in to GitMini</h1>
-          <p>Use a demo account to continue. Sessions are stored in an HttpOnly cookie.</p>
-          <form className="login-form" onSubmit={handleLogin}>
-            <label htmlFor="login-username">Demo user</label>
-            <select id="login-username" name="username" defaultValue="alice">
-              {demoUsers.map((user) => (
-                <option key={user.username} value={user.username}>{user.label} ({user.username}) — {user.description}</option>
-              ))}
-            </select>
-            <label htmlFor="login-password">Password</label>
-            <input id="login-password" name="password" type="password" placeholder="Password" />
-            {loginError ? <div className="inline-error">{loginError}</div> : null}
-            <button className="btn-primary" type="submit" disabled={loading}>{loading ? 'Signing in...' : 'Login'}</button>
-          </form>
-        </div>
+          <Paragraph type="secondary">
+            Sign in with a demo account to manage repositories, permissions, pull requests, analytics and audit logs.
+          </Paragraph>
+
+          <Form layout="vertical" initialValues={{ username: 'alice' }} onFinish={handleLogin}>
+            <Form.Item label="Demo user" name="username" rules={[{ required: true }]}>
+              <Select
+                options={demoUsers.map((user) => ({
+                  value: user.username,
+                  label: `${user.label} (${user.username}) — ${user.description}`,
+                }))}
+              />
+            </Form.Item>
+            <Form.Item label="Password" name="password" rules={[{ required: true, message: 'Enter the demo password' }]}>
+              <Password placeholder="gitmini_password" />
+            </Form.Item>
+            {loginError ? <Alert type="error" showIcon message={loginError} /> : null}
+            <Button type="primary" htmlType="submit" loading={loading} block size="large">Sign in</Button>
+          </Form>
+        </Card>
       </div>
     );
   }
 
   function renderContent() {
-    if (view === 'repos') {
-      return data.length ? (
-        <div className="repo-grid">
-          {data.map((repo) => (
-            <div className="card glass clickable" key={repo.id} onClick={() => openRepo(repo.name)}>
-              <div className="card-title-row">
-                <h3>{repo.name}</h3>
-                <div className="badge-row">
-                  <RoleBadge role={repo.current_user_role} />
-                  <span className={`badge ${repo.is_private ? 'status-private' : 'status-public'}`}>{repo.is_private ? 'Private' : 'Public'}</span>
-                </div>
-              </div>
-              <p>{repo.description || 'No description'}</p>
-              <div className="meta">
-                <span><Lock /> {repo.is_private ? 'Private' : 'Public'}</span>
-                <span><GitCommit /> {repo.commit_count ?? 0} commits</span>
-                <span><GitBranch /> {repo.branch_count ?? 0} branches</span>
-                <span><AlertCircle /> {repo.issue_open_count ?? 0} open issues</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : <EmptyState message="No repositories visible for this user." />;
-    }
-
-    if (view === 'history') {
-      return (
-        <div className="history-list">
-          <SectionHeader title={`History for ${selectedRepo}`} selectedRepo={selectedRepo}>
-            {selectedRepoCapability ? <RoleBadge role={selectedRepoCapability.current_user_role} /> : null}
-            <button className="btn-secondary" onClick={() => setView('repos')}><ArrowLeft /> Back</button>
-          </SectionHeader>
-          {renderMembers()}
-          {data.length ? data.map((item) => (
-            <div className="history-item" key={item.hash}>
-              <div className="commit-card glass card">
-                <code>{(item.hash || '').substring(0, 7)}</code>
-                <p>{item.message}</p>
-                <span>{item.author || 'unknown'} · {formatDate(item.date)}</span>
-              </div>
-            </div>
-          )) : <EmptyState message="No commits found for this repository." />}
-        </div>
-      );
-    }
-
-    if (view === 'issues') {
-      return (
-        <div className="content-section">
-          <SectionHeader title="Global Issues Tracker" selectedRepo={selectedRepo}>
-            <button
-              className="btn-primary"
-              disabled={Boolean(selectedRepoCapability && !selectedRepoCapability.can_create_issue)}
-              onClick={openIssueModal}
-            >
-              <Plus /> New Issue
-            </button>
-          </SectionHeader>
-          {selectedRepoCapability && !selectedRepoCapability.can_create_issue ? <p className="disabled-hint">Your current repo role is read-only for issue creation.</p> : null}
-          {data.length ? (
-            <div className="repo-grid compact-grid">
-              {data.map((issue) => (
-                <div className="card glass" key={issue.id}>
-                  <div className="card-title-row">
-                    <h4>#{issue.id} {issue.title}</h4>
-                    <div className="badge-row">
-                      <RoleBadge role={issue.current_user_role} />
-                      <StatusBadge status={issue.status} />
-                    </div>
-                  </div>
-                  <p>{issue.body || 'No description'}</p>
-                  <div className="meta">
-                    <span><Book /> {issue.repo}</span>
-                    <span><User /> {issue.author || 'unknown'}</span>
-                    <span><Clock /> {formatDate(issue.created_at)}</span>
-                  </div>
-                  <div className="card-actions">
-                    <button
-                      className="btn-secondary"
-                      disabled={!issue.can_update}
-                      onClick={() => updateIssue(issue.id, issue.status === 'closed' ? 'open' : 'closed')}
-                    >
-                      {issue.status === 'closed' ? 'Reopen' : 'Close'}
-                    </button>
-                    {!issue.can_update ? <span className="disabled-hint">read-only role</span> : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : <EmptyState message="No issues found." />}
-        </div>
-      );
-    }
-
-    if (view === 'pulls') {
-      return (
-        <div className="content-section">
-          <SectionHeader title="Pull Requests" selectedRepo={selectedRepo}>
-            <button
-              className="btn-primary"
-              disabled={Boolean(selectedRepoCapability && !selectedRepoCapability.can_create_pull)}
-              onClick={openPullModal}
-            >
-              <GitPullRequest /> New Pull Request
-            </button>
-          </SectionHeader>
-          {selectedRepoCapability && !selectedRepoCapability.can_create_pull ? <p className="disabled-hint">Your current repo role cannot create pull requests.</p> : null}
-          {data.length ? (
-            <div className="repo-grid compact-grid">
-              {data.map((pull) => (
-                <div className="card glass" key={pull.id}>
-                  <div className="card-title-row">
-                    <h4>{pull.title}</h4>
-                    <div className="badge-row">
-                      <RoleBadge role={pull.current_user_role} />
-                      <StatusBadge status={pull.status} />
-                      {pull.target_branch_protected ? <span className="badge status-private">Protected</span> : null}
-                      {pull.is_approved ? <span className="badge status-open">Approved</span> : null}
-                    </div>
-                  </div>
-                  <p>{pull.body || 'No description'}</p>
-                  <div className="meta">
-                    <span><Book /> {pull.repo}</span>
-                    <span><GitBranch /> {pull.source_branch} → {pull.target_branch}</span>
-                    <span><User /> {pull.author || 'unknown'}</span>
-                    <span><Lock /> {pull.approval_count ?? 0} approval{pull.approval_count === 1 ? '' : 's'}</span>
-                    <span><Clock /> {formatDate(pull.updated_at || pull.created_at)}</span>
-                  </div>
-                  {pull.status === 'open' ? (
-                    <div className="card-actions">
-                      <button className="btn-secondary" disabled={!pull.can_update} onClick={() => updatePull(pull.id, 'closed')}>Close</button>
-                      {pull.author !== me.username ? <button className="btn-secondary" onClick={() => approvePull(pull.id)}>Approve</button> : null}
-                      <button className="btn-primary" disabled={!pull.can_merge} onClick={() => updatePull(pull.id, 'merged')}>Merge</button>
-                      {!pull.can_merge ? <span className="disabled-hint">{mergeBlockedReason(pull.merge_blocked_reason)}</span> : null}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          ) : <EmptyState message="No pull requests found. Create one to demonstrate the PR workflow." />}
-        </div>
-      );
-    }
-
-    if (view === 'analytics') {
-      const analytics = data || {};
-      const metrics = [
-        ['Repositories', analytics.repo_count ?? 0],
-        ['Commits', analytics.commit_count ?? 0],
-        ['Open Issues', analytics.open_issue_count ?? 0],
-        ['Merged PRs', analytics.merged_pr_count ?? 0],
-      ];
-      return (
-        <div className="content-section">
-          <SectionHeader title="Repository Analytics" selectedRepo={analytics.scope === 'global' ? 'Admin global scope' : 'Visible repositories only'} />
-          <div className="repo-grid compact-grid">
-            {metrics.map(([label, value]) => (
-              <div className="card glass" key={label}>
-                <div className="metric-value">{value}</div>
-                <div className="metric-label">{label}</div>
-              </div>
-            ))}
-          </div>
-          <div className="repo-grid compact-grid analytics-grid">
-            <div className="card glass">
-              <h3>Top repositories</h3>
-              {(analytics.top_repositories || []).map((repo) => (
-                <div className="analytics-row" key={repo.name}>
-                  <span>{repo.name}</span>
-                  <span>{repo.commit_count} commits · health {repo.health_score}</span>
-                </div>
-              ))}
-            </div>
-            <div className="card glass">
-              <h3>Top contributors</h3>
-              {(analytics.top_contributors || []).map((user) => (
-                <div className="analytics-row" key={user.username}>
-                  <span>{user.username}</span>
-                  <span>{user.commit_count} commits · {user.repositories_touched} repos</span>
-                </div>
-              ))}
-            </div>
-            <div className="card glass">
-              <h3>Recent activity</h3>
-              {(analytics.recent_activity || []).map((item) => (
-                <div className="analytics-row" key={`${item.type}-${item.id}`}>
-                  <span><span className="badge">{item.type}</span> {item.title}</span>
-                  <span>{item.repo} · {formatDate(item.created_at)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    if (view === 'audit') {
-      return (
-        <div className="content-section">
-          <SectionHeader title="Audit Logs" selectedRepo="Admin-only accountability trail" />
-          {data.length ? (
-            <div className="card glass">
-              {data.map((entry) => (
-                <div className="analytics-row audit-row" key={entry.id}>
-                  <span>
-                    <span className="badge">{entry.action}</span> {entry.actor || 'deleted user'} → {entry.target_type} {entry.target_id || ''}
-                    <small>{formatMetadata(entry.metadata)}</small>
-                  </span>
-                  <span>{entry.repo || 'system'} · {formatDate(entry.created_at)}</span>
-                </div>
-              ))}
-            </div>
-          ) : <EmptyState message="No audit logs found yet." />}
-        </div>
-      );
-    }
-
-    if (view === 'search') {
-      return (
-        <div className="content-section">
-          <SectionHeader title={searchTitle} selectedRepo={selectedRepo} />
-          {data.length ? (
-            <div className="repo-grid compact-grid">
-              {data.map((result, index) => (
-                <div className="card glass" key={`${result.type}-${result.id}-${index}`}>
-                  <div className="card-title-row">
-                    <h4>{result.title || result.message || result.hash || result.id}</h4>
-                    <span className="badge">{result.type}</span>
-                  </div>
-                  <p>{result.body || result.message || 'No description'}</p>
-                  <div className="meta">
-                    <span><Book /> {result.repo}</span>
-                    {result.type === 'commit'
-                      ? <span><GitCommit /> {(result.hash || result.id || '').substring(0, 7)}</span>
-                      : <StatusBadge status={result.status} />}
-                    <span><Clock /> {formatDate(result.created_at)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : <EmptyState message="No matching issues or commits found." />}
-        </div>
-      );
-    }
-
+    if (view === 'repos') return renderRepos();
+    if (view === 'history') return renderHistory();
+    if (view === 'issues') return renderIssues();
+    if (view === 'pulls') return renderPulls();
+    if (view === 'analytics') return renderAnalytics();
+    if (view === 'audit') return renderAudit();
+    if (view === 'search') return renderSearch();
     return null;
+  }
+
+  function renderRepos() {
+    return (
+      <div>
+        <SectionHeader title="Repository Control Center" subtitle="Manage visible repositories, branches, commits and role-based access." />
+        {data.length ? (
+          <Row gutter={[18, 18]}>
+            {data.map((repo) => (
+              <Col xs={24} md={12} xl={8} key={repo.id}>
+                <Card
+                  hoverable
+                  className="dashboard-card repo-card"
+                  onClick={() => openRepo(repo.name)}
+                  title={<Space><Book size={18} />{repo.name}</Space>}
+                  extra={<Space><RoleTag role={repo.current_user_role} /><Tag color={repo.is_private ? 'red' : 'green'}>{repo.is_private ? 'Private' : 'Public'}</Tag></Space>}
+                >
+                  <Paragraph type="secondary" ellipsis={{ rows: 2 }}>{repo.description || 'No description'}</Paragraph>
+                  <Row gutter={12}>
+                    <Col span={8}><Statistic title="Commits" value={repo.commit_count ?? 0} /></Col>
+                    <Col span={8}><Statistic title="Branches" value={repo.branch_count ?? 0} /></Col>
+                    <Col span={8}><Statistic title="Open issues" value={repo.issue_open_count ?? 0} /></Col>
+                  </Row>
+                </Card>
+              </Col>
+            ))}
+          </Row>
+        ) : <Empty description="No repositories visible for this user." />}
+      </div>
+    );
+  }
+
+  function renderHistory() {
+    return (
+      <div>
+        <SectionHeader title={`Commit History`} selectedRepo={selectedRepo}>
+          {selectedRepoCapability ? <RoleTag role={selectedRepoCapability.current_user_role} /> : null}
+          <Button icon={<ArrowLeft size={16} />} onClick={() => setView('repos')}>Back</Button>
+        </SectionHeader>
+        {renderMembers()}
+        {data.length ? (
+          <Card className="dashboard-card">
+            <Timeline
+              items={data.map((item) => ({
+                color: 'blue',
+                children: (
+                  <div className="timeline-commit">
+                    <Tag color="geekblue">{(item.hash || '').substring(0, 7)}</Tag>
+                    <Text strong>{item.message}</Text>
+                    <Text type="secondary">{item.author || 'unknown'} · {formatDate(item.date)}</Text>
+                  </div>
+                ),
+              }))}
+            />
+          </Card>
+        ) : <Empty description="No commits found for this repository." />}
+      </div>
+    );
+  }
+
+  function renderIssues() {
+    const columns = [
+      { title: 'Issue', dataIndex: 'title', render: (title, issue) => <Space direction="vertical" size={0}><Text strong>#{issue.id} {title}</Text><Text type="secondary">{issue.body || 'No description'}</Text></Space> },
+      { title: 'Repo', dataIndex: 'repo', render: (repo) => <Tag icon={<Book size={13} />}>{repo}</Tag> },
+      { title: 'Author', dataIndex: 'author', render: (author) => author || 'unknown' },
+      { title: 'Role', dataIndex: 'current_user_role', render: (role) => <RoleTag role={role} /> },
+      { title: 'Status', dataIndex: 'status', render: (status) => <StatusTag status={status} /> },
+      { title: 'Created', dataIndex: 'created_at', render: formatDate },
+      {
+        title: 'Action',
+        render: (_, issue) => (
+          <Tooltip title={!issue.can_update ? 'Read-only role' : ''}>
+            <Button disabled={!issue.can_update} onClick={() => updateIssue(issue.id, issue.status === 'closed' ? 'open' : 'closed')}>
+              {issue.status === 'closed' ? 'Reopen' : 'Close'}
+            </Button>
+          </Tooltip>
+        ),
+      },
+    ];
+
+    return (
+      <div>
+        <SectionHeader title="Global Issues Tracker" selectedRepo={selectedRepo}>
+          <Button
+            type="primary"
+            icon={<Plus size={16} />}
+            disabled={Boolean(selectedRepoCapability && !selectedRepoCapability.can_create_issue)}
+            onClick={openIssueModal}
+          >
+            New Issue
+          </Button>
+        </SectionHeader>
+        {selectedRepoCapability && !selectedRepoCapability.can_create_issue ? <Alert type="warning" showIcon message="Your current repo role is read-only for issue creation." className="content-alert" /> : null}
+        <Table rowKey="id" columns={columns} dataSource={data} pagination={{ pageSize: 8 }} scroll={{ x: 980 }} />
+      </div>
+    );
+  }
+
+  function renderPulls() {
+    const columns = [
+      { title: 'Pull request', dataIndex: 'title', render: (title, pull) => <Space direction="vertical" size={0}><Text strong>{title}</Text><Text type="secondary">{pull.body || 'No description'}</Text></Space> },
+      { title: 'Repo', dataIndex: 'repo', render: (repo) => <Tag>{repo}</Tag> },
+      { title: 'Branches', render: (_, pull) => <Text>{pull.source_branch} → {pull.target_branch}</Text> },
+      { title: 'Governance', render: (_, pull) => <Space wrap><RoleTag role={pull.current_user_role} /><StatusTag status={pull.status} />{pull.target_branch_protected ? <Tag color="red">Protected</Tag> : null}{pull.is_approved ? <Tag color="green">Approved</Tag> : null}<Tag>{pull.approval_count ?? 0} approval{pull.approval_count === 1 ? '' : 's'}</Tag></Space> },
+      { title: 'Updated', render: (_, pull) => formatDate(pull.updated_at || pull.created_at) },
+      {
+        title: 'Actions',
+        render: (_, pull) => pull.status === 'open' ? (
+          <Space wrap>
+            <Button disabled={!pull.can_update} onClick={() => updatePull(pull.id, 'closed')}>Close</Button>
+            {pull.author !== me.username ? <Button onClick={() => approvePull(pull.id)}>Approve</Button> : null}
+            <Tooltip title={!pull.can_merge ? mergeBlockedReason(pull.merge_blocked_reason) : ''}>
+              <Button type="primary" disabled={!pull.can_merge} onClick={() => updatePull(pull.id, 'merged')}>Merge</Button>
+            </Tooltip>
+          </Space>
+        ) : null,
+      },
+    ];
+
+    return (
+      <div>
+        <SectionHeader title="Pull Request Governance" selectedRepo={selectedRepo}>
+          <Button
+            type="primary"
+            icon={<GitPullRequest size={16} />}
+            disabled={Boolean(selectedRepoCapability && !selectedRepoCapability.can_create_pull)}
+            onClick={openPullModal}
+          >
+            New Pull Request
+          </Button>
+        </SectionHeader>
+        {selectedRepoCapability && !selectedRepoCapability.can_create_pull ? <Alert type="warning" showIcon message="Your current repo role cannot create pull requests." className="content-alert" /> : null}
+        <Table rowKey="id" columns={columns} dataSource={data} pagination={{ pageSize: 8 }} scroll={{ x: 1120 }} />
+      </div>
+    );
+  }
+
+  function renderAnalytics() {
+    const analytics = data || {};
+    const metrics = [
+      ['Repositories', analytics.repo_count ?? 0, <Database size={22} />],
+      ['Commits', analytics.commit_count ?? 0, <GitCommit size={22} />],
+      ['Open Issues', analytics.open_issue_count ?? 0, <AlertCircle size={22} />],
+      ['Merged PRs', analytics.merged_pr_count ?? 0, <GitPullRequest size={22} />],
+    ];
+
+    return (
+      <div>
+        <SectionHeader title="Repository Analytics" selectedRepo={analytics.scope === 'global' ? 'Admin global scope' : 'Visible repositories only'} />
+        <Row gutter={[18, 18]}>
+          {metrics.map(([label, value, icon]) => (
+            <Col xs={24} sm={12} xl={6} key={label}>
+              <Card className="dashboard-card"><Statistic title={label} value={value} prefix={icon} /></Card>
+            </Col>
+          ))}
+        </Row>
+        <Row gutter={[18, 18]} className="analytics-panels">
+          <Col xs={24} lg={8}>
+            <Card title="Top repositories" className="dashboard-card">
+              <List dataSource={analytics.top_repositories || []} renderItem={(repo) => <List.Item><Text>{repo.name}</Text><Text type="secondary">{repo.commit_count} commits · health {repo.health_score}</Text></List.Item>} />
+            </Card>
+          </Col>
+          <Col xs={24} lg={8}>
+            <Card title="Top contributors" className="dashboard-card">
+              <List dataSource={analytics.top_contributors || []} renderItem={(user) => <List.Item><Text>{user.username}</Text><Text type="secondary">{user.commit_count} commits · {user.repositories_touched} repos</Text></List.Item>} />
+            </Card>
+          </Col>
+          <Col xs={24} lg={8}>
+            <Card title="Recent activity" className="dashboard-card">
+              <List dataSource={analytics.recent_activity || []} renderItem={(item) => <List.Item><Space direction="vertical" size={0}><Text><Tag>{item.type}</Tag>{item.title}</Text><Text type="secondary">{item.repo} · {formatDate(item.created_at)}</Text></Space></List.Item>} />
+            </Card>
+          </Col>
+        </Row>
+      </div>
+    );
+  }
+
+  function renderAudit() {
+    const columns = [
+      { title: 'Action', dataIndex: 'action', render: (action) => <Tag color="blue">{action}</Tag> },
+      { title: 'Actor', dataIndex: 'actor', render: (actor) => actor || 'deleted user' },
+      { title: 'Target', render: (_, entry) => `${entry.target_type} ${entry.target_id || ''}` },
+      { title: 'Repository', dataIndex: 'repo', render: (repo) => repo || 'system' },
+      { title: 'Metadata', dataIndex: 'metadata', render: (metadata) => <Text type="secondary">{formatMetadata(metadata)}</Text> },
+      { title: 'Created', dataIndex: 'created_at', render: formatDate },
+    ];
+
+    return (
+      <div>
+        <SectionHeader title="Audit Logs" subtitle="Admin-only accountability trail for sensitive operations." />
+        <Table rowKey="id" columns={columns} dataSource={data} pagination={{ pageSize: 10 }} scroll={{ x: 1100 }} />
+      </div>
+    );
+  }
+
+  function renderSearch() {
+    return (
+      <div>
+        <SectionHeader title={searchTitle} selectedRepo={selectedRepo} />
+        {data.length ? (
+          <Row gutter={[18, 18]}>
+            {data.map((result, index) => (
+              <Col xs={24} md={12} xl={8} key={`${result.type}-${result.id}-${index}`}>
+                <Card className="dashboard-card" title={result.title || result.message || result.hash || result.id} extra={<Tag>{result.type}</Tag>}>
+                  <Paragraph type="secondary" ellipsis={{ rows: 3 }}>{result.body || result.message || 'No description'}</Paragraph>
+                  <Space wrap>
+                    <Tag icon={<Book size={13} />}>{result.repo}</Tag>
+                    {result.type === 'commit'
+                      ? <Tag icon={<GitCommit size={13} />}>{(result.hash || result.id || '').substring(0, 7)}</Tag>
+                      : <StatusTag status={result.status} />}
+                    <Tag icon={<Clock size={13} />}>{formatDate(result.created_at)}</Tag>
+                  </Space>
+                </Card>
+              </Col>
+            ))}
+          </Row>
+        ) : <Empty description="No matching issues or commits found." />}
+      </div>
+    );
   }
 
   function renderMembers() {
@@ -771,59 +746,114 @@ export default function App() {
 
     if (!mayViewMembers) {
       return (
-        <div className="members-panel glass">
-          <div className="card-title-row">
-            <h3>Repository members</h3>
-            <RoleBadge role={selectedRepoRole} />
-          </div>
-          <p className="disabled-hint">Only admin, owner or maintainer can view repository members.</p>
-        </div>
+        <Alert
+          type="warning"
+          showIcon
+          message="Repository members are restricted"
+          description="Only admin, owner or maintainer can view repository members."
+          className="content-alert"
+        />
       );
     }
 
+    const memberColumns = [
+      { title: 'User', render: (_, member) => <Space direction="vertical" size={0}><Text strong>{member.username}</Text><Text type="secondary">{member.full_name || 'No full name'} · joined {formatDate(member.joined_at)}</Text></Space> },
+      {
+        title: 'Role',
+        render: (_, member) => mayManageMembers ? (
+          <Select value={member.role} onChange={(role) => updateMember(member.username, role)} options={repoRoles.map((role) => ({ value: role, label: role }))} />
+        ) : <RoleTag role={member.role} />,
+      },
+      { title: 'Action', render: (_, member) => <Button danger disabled={!mayManageMembers} onClick={() => removeMember(member.username)}>Remove</Button> },
+    ];
+
     return (
-      <div className="members-panel glass">
-        <div className="card-title-row">
-          <div>
-            <h3>Repository members</h3>
-            <p>{mayManageMembers ? 'Owner/admin can add, change roles and remove members.' : 'Maintainer can view members only.'}</p>
-          </div>
-          <RoleBadge role={selectedRepoRole} />
-        </div>
-
-        {memberError ? <div className="inline-error">{memberError}</div> : null}
-
+      <Card className="dashboard-card members-card" title={<Space><ShieldCheck size={18} />Repository members</Space>} extra={<RoleTag role={selectedRepoRole} />}>
+        <Paragraph type="secondary">
+          {mayManageMembers ? 'Owner/admin can add, change roles and remove members.' : 'Maintainer can view members only.'}
+        </Paragraph>
+        {memberError ? <Alert type="error" showIcon message={memberError} className="content-alert" /> : null}
         {mayManageMembers ? (
-          <form className="member-form" onSubmit={addMember}>
-            <input name="username" type="text" placeholder="Username" />
-            <select name="role" defaultValue="viewer">
-              {repoRoles.map((role) => <option key={role} value={role}>{role}</option>)}
-            </select>
-            <button className="btn-primary" type="submit"><Plus /> Add member</button>
-          </form>
-        ) : <p className="disabled-hint">Only owner/admin can manage roles.</p>}
+          <Form form={memberForm} layout="inline" initialValues={{ role: 'viewer' }} onFinish={addMember} className="member-form">
+            <Form.Item name="username" rules={[{ required: true, message: 'Enter username' }]}>
+              <Input placeholder="Username" />
+            </Form.Item>
+            <Form.Item name="role">
+              <Select style={{ width: 150 }} options={repoRoles.map((role) => ({ value: role, label: role }))} />
+            </Form.Item>
+            <Button type="primary" htmlType="submit" icon={<Plus size={16} />}>Add member</Button>
+          </Form>
+        ) : <Alert type="info" showIcon message="Only owner/admin can manage roles." className="content-alert" />}
+        <Table rowKey="username" columns={memberColumns} dataSource={members} pagination={false} locale={{ emptyText: 'No members found.' }} />
+      </Card>
+    );
+  }
 
-        {members.length ? (
-          <div className="member-list">
-            {members.map((member) => (
-              <div className="member-row" key={member.username}>
-                <div>
-                  <strong>{member.username}</strong>
-                  <span>{member.full_name || 'No full name'} · joined {formatDate(member.joined_at)}</span>
-                </div>
-                <div className="member-actions">
-                  {mayManageMembers ? (
-                    <select value={member.role} onChange={(event) => updateMember(member.username, event.target.value)}>
-                      {repoRoles.map((role) => <option key={role} value={role}>{role}</option>)}
-                    </select>
-                  ) : <RoleBadge role={member.role} />}
-                  <button className="btn-secondary" disabled={!mayManageMembers} onClick={() => removeMember(member.username)}>Remove</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : <p className="disabled-hint">No members found.</p>}
-      </div>
+  function renderModals() {
+    return (
+      <>
+        <Modal title="Create New Repository" open={modal === 'repo'} onCancel={() => setModal(null)} footer={null} destroyOnClose>
+          <Form layout="vertical" onFinish={createRepo} initialValues={{ isPrivate: false }}>
+            <Form.Item label="Repository name" name="name" rules={[{ required: true, message: 'Enter repository name' }]}>
+              <Input placeholder="Repository name" />
+            </Form.Item>
+            <Form.Item label="Description" name="description">
+              <TextArea rows={3} placeholder="Description" />
+            </Form.Item>
+            <Form.Item name="isPrivate" valuePropName="checked">
+              <Checkbox>Private repository</Checkbox>
+            </Form.Item>
+            <Button type="primary" htmlType="submit" block>Create Now</Button>
+          </Form>
+        </Modal>
+
+        <Modal title="Create Issue" open={modal === 'issue'} onCancel={() => setModal(null)} footer={null} destroyOnClose>
+          {selectedRepoCapability && !selectedRepoCapability.can_create_issue ? <Alert type="warning" showIcon message="Current role cannot create issues in this repository." className="content-alert" /> : null}
+          <Form layout="vertical" onFinish={createIssue} initialValues={{ repo: selectedRepo || '' }}>
+            <Form.Item label="Repository" name="repo" rules={[{ required: true, message: 'Enter repository name' }]}>
+              <Input placeholder="Repository name" />
+            </Form.Item>
+            <Form.Item label="Issue title" name="title" rules={[{ required: true, message: 'Enter issue title' }]}>
+              <Input placeholder="Issue title" />
+            </Form.Item>
+            <Form.Item label="Description" name="body">
+              <TextArea rows={4} placeholder="Description" />
+            </Form.Item>
+            <Form.Item label="Labels" name="labels">
+              <Input placeholder="backend, database, security" />
+            </Form.Item>
+            <Button type="primary" htmlType="submit" block>Create Issue</Button>
+          </Form>
+        </Modal>
+
+        <Modal title="Create Pull Request" open={modal === 'pull'} onCancel={() => setModal(null)} footer={null} destroyOnClose>
+          {selectedRepoCapability && !selectedRepoCapability.can_create_pull ? <Alert type="warning" showIcon message="Current role cannot create pull requests in this repository." className="content-alert" /> : null}
+          <Form layout="vertical" onFinish={createPull} initialValues={{ repo: selectedRepo || '', source: 'feature/demo', target: 'main' }}>
+            <Form.Item label="Repository" name="repo" rules={[{ required: true, message: 'Enter repository name' }]}>
+              <Input placeholder="Repository name" />
+            </Form.Item>
+            <Form.Item label="Pull request title" name="title" rules={[{ required: true, message: 'Enter pull request title' }]}>
+              <Input placeholder="Pull request title" />
+            </Form.Item>
+            <Row gutter={12}>
+              <Col span={12}>
+                <Form.Item label="Source branch" name="source" rules={[{ required: true }]}>
+                  <Input />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item label="Target branch" name="target" rules={[{ required: true }]}>
+                  <Input />
+                </Form.Item>
+              </Col>
+            </Row>
+            <Form.Item label="Description" name="body">
+              <TextArea rows={4} placeholder="Description" />
+            </Form.Item>
+            <Button type="primary" htmlType="submit" block>Create Pull Request</Button>
+          </Form>
+        </Modal>
+      </>
     );
   }
 }
