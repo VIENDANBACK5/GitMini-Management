@@ -14,12 +14,10 @@ Trong phần này, lược đồ logic của GitMini được trình bày với 
 
 
 A.2. Lược đồ Logic — 20 Quan hệ
-(1) USERS
 users(id, username, email, password_hash, full_name, bio,       avatar_url, is_active, created_at, updated_at)
-Khóa chính: id   |   Khóa dự tuyển: username, email
-(2) REPOSITORIES
+Khóa chính: id (UUID)   |   Khóa dự tuyển: username, email
 repositories(id, name, description, owner_id, is_private, default_branch,              stars_count, forks_count, created_at, updated_at)
-FK: owner_id → users(id)  ON DELETE CASCADE
+FK: owner_id (UUID) → users(id)  ON DELETE CASCADE
 UNIQUE: (owner_id, name)
 (3) COMMITS
 commits(commit_hash, repo_id, author_id, message, created_at)
@@ -177,10 +175,8 @@ Cho lược đồ quan hệ R(U) với U là tập thuộc tính. Phụ thuộc 
 
 
 Dạng chuẩn 1 (First Normal Form — 1NF)
-Một quan hệ đạt 1NF khi và chỉ khi tất cả các thuộc tính đều có giá trị nguyên tử (atomic) — tức là không có thuộc tính đa trị hay thuộc tính phức hợp lồng nhau. Mỗi ô trong bảng chứa đúng một giá trị duy nhất, không thể chia nhỏ hơn.
-Ví dụ vi phạm: Nếu cột phone lưu '0912345, 0987654' (hai số điện thoại trong một ô) thì vi phạm 1NF. Khắc phục: tách ra bảng riêng hoặc dùng kiểu mảng gốc của PostgreSQL.
-
-
+Một quan hệ đạt 1NF khi và chỉ khi✓ Đạt 1NF: Tất cả thuộc tính (username, email, password_hash...) đều là nguyên tử, không có thuộc tính đa trị hay phức hợp lồng nhau.
+Ví dụ đạt 1NF: Cột labels trong bảng ISSUES sử dụng kiểu dữ liệu TEXT[] (mảng gốc của PostgreSQL). Đây là tập hợp các giá trị nguyên tử (atomic) đồng nhất được hệ quản trị hỗ trợ trực tiếp qua các toán tử tập hợp, do đó không vi phạm nguyên tắc 1NF trong thiết kế CSDL hiện đại.
 Dạng chuẩn 2 (Second Normal Form — 2NF)
 Một quan hệ đạt 2NF khi đã đạt 1NF và mọi thuộc tính không khóa (non-key attribute) đều phụ thuộc hàm đầy đủ (full functional dependency) vào toàn bộ khóa chính — tức là không tồn tại phụ thuộc bộ phận (partial dependency). Điều kiện này chỉ có ý nghĩa khi khóa chính là khóa ghép (composite key); nếu khóa chính là đơn thì lược đồ tự động đạt 2NF.
 Ví dụ vi phạm: Trong bảng ENROLLMENT(__student_id__, __course_id__, student_name), student_name chỉ phụ thuộc vào student_id, không phụ thuộc vào course_id — đây là phụ thuộc bộ phận, vi phạm 2NF. Khắc phục: tách student_name sang bảng STUDENTS.
@@ -193,7 +189,7 @@ Ví dụ vi phạm: Trong bảng EMPLOYEE(__emp_id__, dept_id, dept_name), dept_
 
 B.2. Chứng minh đạt 3NF cho từng quan hệ
 ▶ Bảng: USERS
-Khóa chính: id (SERIAL, đơn)
+Khóa chính: id (UUID, đơn)
 Tập phụ thuộc hàm F:
 id → username, email, password_hash, full_name, bio, avatar_url, is_active, created_at, updated_at
 username → id, email          (username là khóa dự tuyển UNIQUE)
@@ -202,7 +198,7 @@ email → id, username          (email là khóa dự tuyển UNIQUE)
 ✓ Đạt 2NF: Khóa chính là đơn (id), nên không thể có phụ thuộc bộ phận. Mọi thuộc tính đều phụ thuộc đầy đủ vào id.
 ✓ Đạt 3NF: Không tồn tại phụ thuộc bắc cầu: id → username (khóa dự tuyển, là siêu khóa) và id → email (khóa dự tuyển, là siêu khóa). Không có thuộc tính không khóa nào xác định thuộc tính không khóa khác.
 ▶ Bảng: REPOSITORIES
-Khóa chính: id (SERIAL, đơn)  |  Khóa dự tuyển bổ sung: (owner_id, name)
+Khóa chính: id (UUID, đơn)  |  Khóa dự tuyển bổ sung: (owner_id, name)
 Tập phụ thuộc hàm F:
 id → name, description, owner_id, is_private, default_branch, stars_count, forks_count, created_at, updated_at
 {owner_id, name} → id          (ràng buộc UNIQUE composite)
@@ -214,11 +210,11 @@ id → name, description, owner_id, is_private, default_branch, stars_count, for
 Khóa chính: commit_hash (CHAR(40), đơn — SHA-1 hash)
 Tập phụ thuộc hàm F:
 commit_hash → repo_id, author_id, message, created_at
-✓ Đạt 1NF: Tất cả thuộc tính đều nguyên tử. message là TEXT đơn, author_id và repo_id là FK số nguyên.
+✓ Đạt 1NF: Tất cả thuộc tính đều nguyên tử. message là TEXT đơn, author_id và repo_id là FK kiểu UUID.
 ✓ Đạt 2NF: Khóa chính là đơn (commit_hash), tự đạt 2NF. Không thể có phụ thuộc bộ phận khi khóa không ghép.
 ✓ Đạt 3NF: commit_hash → repo_id, nhưng repo_id → repo_name KHÔNG TỒN TẠI trong bảng này (repo_name đã được tách sang bảng repositories). Tương tự, commit_hash → author_id, nhưng author_id → username KHÔNG TỒN TẠI ở đây. Không có phụ thuộc bắc cầu nào vì thông tin chi tiết của repo và user đã được tách bảng đúng chuẩn.
 ▶ Bảng: COMMIT_PARENTS
-Khóa chính: (commit_hash, parent_hash) — Khóa chính ghép (Composite PK)
+Khóa chính: {commit_hash, parent_hash} (Khóa ghép: CHAR(40), CHAR(40))
 Tập phụ thuộc hàm F:
 {commit_hash, parent_hash} → ordinal
 commit_hash → (không xác định được ordinal độc lập)
@@ -227,22 +223,22 @@ parent_hash → (không xác định được ordinal độc lập)
 ✓ Đạt 2NF: Khóa chính là ghép (commit_hash, parent_hash). Thuộc tính không khóa duy nhất là ordinal. Ordinal biểu thị thứ tự của parent trong ngữ cảnh của một cặp (commit_hash, parent_hash) cụ thể, không thể xác định bằng chỉ commit_hash hoặc chỉ parent_hash riêng lẻ. Do đó không có phụ thuộc bộ phận. Đây là điểm đặc biệt nhất của bảng này: chứng minh 2NF cho khóa ghép.
 ✓ Đạt 3NF: Chỉ có một thuộc tính không khóa (ordinal) và ordinal là giá trị nguyên — không xác định bất kỳ thuộc tính nào khác. Không tồn tại chuỗi phụ thuộc bắc cầu nào.
 ▶ Bảng: BRANCHES
-Khóa chính: id (SERIAL, đơn)  |  Khóa dự tuyển: (repo_id, name)
+Khóa chính: id (UUID, đơn)  |  Khóa dự tuyển: (repo_id, name)
 Tập phụ thuộc hàm F:
 id → repo_id, name, head_commit_hash, is_protected, created_at, updated_at
 {repo_id, name} → id          (ràng buộc UNIQUE composite)
-✓ Đạt 1NF: Tất cả thuộc tính đều nguyên tử. name là VARCHAR, head_commit_hash là CHAR(40), các cột còn lại là kiểu cơ bản.
+✓ Đạt 1NF: Tất cả thuộc tính đều nguyên tử. name là VARCHAR, head_commit_hash là UUID, các cột còn lại là kiểu cơ bản.
 ✓ Đạt 2NF: Khóa chính là đơn (id), tự đạt 2NF.
 ✓ Đạt 3NF: id → head_commit_hash, nhưng head_commit_hash → message (thông tin chi tiết commit) KHÔNG TỒN TẠI trong bảng branches. Tương tự, id → repo_id, nhưng repo_id → repo_name KHÔNG TỒN TẠI ở đây. Tất cả thông tin chi tiết đã được tách sang bảng tương ứng. Không có phụ thuộc bắc cầu.
 ▶ Bảng: ISSUES
-Khóa chính: id (SERIAL, đơn)
+Khóa chính: id (UUID, đơn)
 Tập phụ thuộc hàm F:
 id → repo_id, author_id, assignee_id, title, body, status, labels, created_at, updated_at, closed_at
 ✓ Đạt 1NF: Tất cả thuộc tính đều nguyên tử. Cột labels dùng kiểu TEXT[] (mảng gốc PostgreSQL) — đây là trường hợp đặc biệt cho phép trong thiết kế hiện đại, không vi phạm 1NF theo định nghĩa mở rộng khi các phần tử mảng là nguyên tử đồng nhất.
 ✓ Đạt 2NF: Khóa chính là đơn (id), tự đạt 2NF.
 ✓ Đạt 3NF: id → status (giá trị ENUM 'open'/'closed'), nhưng status không xác định thêm bất kỳ thuộc tính nào khác trong bảng. id → author_id, nhưng thông tin chi tiết của author (username...) không có ở đây. id → repo_id, nhưng thông tin chi tiết repo không có ở đây. Không có phụ thuộc bắc cầu.
 ▶ Bảng: PULL_REQUESTS
-Khóa chính: id (SERIAL, đơn)
+Khóa chính: id (UUID, đơn)
 Tập phụ thuộc hàm F:
 id → repo_id, author_id, title, body, status, source_branch, target_branch,
 
@@ -278,7 +274,7 @@ Nếu tuân thủ 3NF nghiêm ngặt
 	Không cần cập nhật thêm bảng phụ khi ghi dữ liệu
 	Mỗi thao tác ghi phải cập nhật thêm repo_stats (chi phí ghi tăng nhẹ)
 	Dữ liệu luôn nhất quán tức thì (strong consistency)
-	Nhất quán trong phạm vi transaction (nhờ TRIGGER), nhất quán tức thì theo giao dịch
+	Nhất quán trong phạm vi transaction (nhờ TRIGGER), dữ liệu bảng stats được cập nhật ngay lập tức cùng với transaction của bảng gốc.
 
 
 Cơ chế đảm bảo tính nhất quán:
@@ -286,7 +282,7 @@ Cơ chế đảm bảo tính nhất quán:
 
 
 Kết luận về repo_stats:
-Bảng repo_stats là vi phạm 3NF có chủ đích (intentional denormalization), không phải lỗi thiết kế. Kỹ thuật này được sử dụng rộng rãi trong các hệ thống thực tế hiệu năng cao (ví dụ: GitHub lưu star_count trực tiếp trong bảng repositories, không COUNT mỗi lần). Đây là sự đánh đổi (trade-off) hợp lý: hy sinh một phần tính thuần nhất lý thuyết để đổi lấy hiệu năng đọc vượt trội, đồng thời vẫn đảm bảo tính nhất quán trong phạm vi giao dịch nhờ cơ chế Trigger.
+Bảng repo_stats là vi phạm 3NF có chủ đích (intentional denormalization), không phải lỗi thiết kế. Kỹ thuật này được sử dụng rộng rãi trong các hệ thống thực tế hiệu năng cao. Để đảm bảo tính toàn vẹn, hệ thống sử dụng cơ chế Write-through consistency: trigger đảm bảo dữ liệu stats luôn khớp với dữ liệu thực tế ngay trong cùng một transaction. Đây là sự đánh đổi (trade-off) hợp lý: hy sinh một phần tính thuần nhất lý thuyết để đổi lấy hiệu năng đọc vượt trội.
 
 
 
