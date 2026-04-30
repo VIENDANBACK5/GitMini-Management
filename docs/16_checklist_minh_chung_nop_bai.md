@@ -25,11 +25,16 @@ Bật terminal tại thư mục gốc của project, chạy các lệnh sau và 
 
 ## BƯỚC 2: Chụp minh chứng cho file `04_toi_uu_csdl_index.md`
 
-Mở công cụ DBeaver, pgAdmin hoặc DataGrip, kết nối vào database `gitmini_db` ở cổng `5435`.
-Chạy câu lệnh SQL sau để lấy danh sách tất cả các Index hiện có trong CSDL và **chụp lại kết quả**:
+Thay vì cài đặt phần mềm bên ngoài, bạn có thể truy cập trực tiếp vào cơ sở dữ liệu ngay trong Terminal bằng lệnh:
+```bash
+docker exec -it gitmini_db_container psql -U gitmini_user -d gitmini_db
+```
+*(Bạn sẽ thấy dấu nhắc lệnh đổi thành `gitmini_db=#`)*
+
+Tiếp theo, dán câu lệnh SQL sau vào và Enter để lấy danh sách Index, sau đó **chụp lại kết quả**:
 
 ```sql
-SELECT tablename, indexname, indexdef 
+SELECT tablename, indexname 
 FROM pg_indexes 
 WHERE schemaname = 'public' 
 ORDER BY tablename, indexname;
@@ -39,9 +44,14 @@ ORDER BY tablename, indexname;
 
 ## BƯỚC 3: Chụp minh chứng cho file `05_minh_chung_toi_uu_explain.md`
 
-Bạn sẽ cần chạy 4 câu lệnh `EXPLAIN ANALYZE` và **chụp màn hình** cả câu lệnh lẫn kết quả (Tab Execution Plan trong DBeaver/DataGrip).
+Vẫn trong giao diện `gitmini_db=#` ở trên, bạn sẽ chạy 4 câu lệnh `EXPLAIN ANALYZE` và **chụp màn hình** kết quả trả về.
 
-*Lưu ý: Bạn cần lấy một `repo_id` thực tế trong máy bạn để test, hãy chạy lệnh `SELECT id FROM repositories LIMIT 1;` và thay vào chỗ `<MÃ_REPO_CỦA_BẠN>`.*
+*Lưu ý: Để truy vấn chính xác, hệ thống cần một mã ID ngẫu nhiên. Hãy chạy lệnh này để lấy 1 mã Repo và 1 mã Commit:*
+```sql
+SELECT id AS ma_repo_cua_ban FROM repositories LIMIT 1;
+SELECT commit_hash AS ma_commit_cua_ban FROM commit_parents LIMIT 1;
+```
+*(Copy 2 đoạn mã vừa hiện ra để thay thế vào chữ `<MÃ...>` ở các câu lệnh bên dưới nhé)*
 
 **Minh chứng 1: Truy vấn Commit History cực nhanh nhờ Composite Index**
 ```sql
@@ -90,7 +100,9 @@ WHERE repo_id = '<MÃ_REPO_CỦA_BẠN>';
 
 ## BƯỚC 4: Chụp minh chứng cho file `06_sao_luu_phuc_hoi.md`
 
-Bật Terminal gốc (nơi có docker-compose.yml), chạy lần lượt các lệnh sau và **chụp lại toàn bộ Terminal**:
+Nếu bạn vẫn đang ở trong màn hình `gitmini_db=#`, hãy gõ lệnh `\q` và ấn Enter để thoát ra ngoài Terminal thường trước nhé.
+
+Sau đó, chạy lần lượt các lệnh sau và **chụp lại toàn bộ Terminal**:
 
 **Minh chứng 1: Chạy Logical Backup (pg_dump)**
 ```bash
