@@ -92,7 +92,7 @@ docker compose up -d
 
 ---
 ## 4. Minh chứng và Báo cáo
-Toàn bộ kết quả đo đạc hiệu năng và ảnh chụp màn hình vận hành được lưu trong thư mục `docs/` và `screenshots/`. Sinh viên có thể sử dụng các file này làm tài liệu bảo vệ trước hội đồng.
+Toàn bộ kết quả đo đạc hiệu năng và ảnh chụp màn hình vận hành được lưu trong thư mục `docs/` và `screenshots/`.
 ---
 **Nhóm thực hiện:** [minhmoidz]
 **Môn học:** Quản trị Cơ sở dữ liệu nâng cao
