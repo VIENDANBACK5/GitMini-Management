@@ -64,7 +64,7 @@ http://localhost:8099/
 
 ## 3. Chức năng web app hiện có
 
-Ứng dụng GitMini Dashboard minh họa các chức năng chính của hệ thống:
+Ứng dụng GitMini Console hiện dùng giao diện dashboard quản trị bằng Ant Design, minh họa các chức năng chính của hệ thống:
 
 1. Xem danh sách repository.
 2. Tạo repository mới.
@@ -334,18 +334,21 @@ screenshots/
 Danh sách ảnh đề xuất:
 
 ```text
-screenshots/01_dashboard_repositories.png
-screenshots/02_create_repository.png
-screenshots/03_commit_history.png
-screenshots/04_global_issues.png
-screenshots/05_pull_requests.png
-screenshots/06_search_results.png
-screenshots/07_health_check.png
-screenshots/08_schema_tables.png
-screenshots/09_explain_commit_history.png
-screenshots/10_explain_fulltext.png
-screenshots/11_repo_stats.png
-screenshots/12_backup_restore.png
+screenshots/01_login.png
+screenshots/02_dashboard_repositories.png
+screenshots/03_create_repository.png
+screenshots/04_commit_history.png
+screenshots/05_repository_members.png
+screenshots/06_global_issues.png
+screenshots/07_pull_requests.png
+screenshots/08_analytics.png
+screenshots/09_audit_logs.png
+screenshots/10_search_results.png
+screenshots/11_health_check.png
+screenshots/12_schema_20_tables.png
+screenshots/13_explain_analyze.png
+screenshots/14_backup_restore_pass.png
+screenshots/15_tests_pass.png
 ```
 
 ---
@@ -354,7 +357,7 @@ screenshots/12_backup_restore.png
 
 | Hạng mục | Trạng thái hiện tại |
 |---|---|
-| Giao diện dashboard | Đã có web frontend |
+| Giao diện dashboard | Đã có web frontend Ant Design |
 | API backend | Đã có FastAPI backend |
 | Kết nối PostgreSQL | Đã kết nối qua `DATABASE_URL` |
 | Danh sách repository | Đã gọi API `/repos` |

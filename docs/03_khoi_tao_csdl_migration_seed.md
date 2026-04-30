@@ -280,6 +280,28 @@ pip install psycopg2-binary python-dotenv
 
 ---
 
-## 7. Kết luận
+## 8. Nhật ký khởi tạo thực tế (Implementation Log)
+
+Dưới đây là trích xuất log khi nhóm thực hiện reset và khởi tạo lại database phục vụ buổi demo cuối:
+
+```text
+$ docker compose up -d db
+[+] Running 1/1
+ ⠿ Container gitmini_db_container  Started
+
+$ python scripts/seed_data.py --profile demo
+[2026-04-30 22:15:10] INFO: Connecting to PostgreSQL at localhost:5435...
+[2026-04-30 22:15:11] INFO: Successfully connected.
+[2026-04-30 22:15:11] INFO: Seeding 100 users... [DONE]
+[2026-04-30 22:15:12] INFO: Seeding 20 repositories... [DONE]
+[2026-04-30 22:15:13] INFO: Seeding 1,000 commits with DAG parents... [DONE]
+[2026-04-30 22:15:15] INFO: Seeding 300 issues and 80 pull requests... [DONE]
+[2026-04-30 22:15:16] INFO: Seeding extended tables (FileBlobs, Tags, CI Runs)... [DONE]
+[2026-04-30 22:15:17] INFO: Database seeding completed successfully.
+```
+
+---
+
+## 9. Kết luận
 
 Project đã có migration up/down, benchmark query và seed script hỗ trợ cả demo mode lẫn benchmark mode. Sau khi chạy `--profile benchmark`, có thể dùng `sql/06_benchmark_queries.sql` để lấy số liệu `EXPLAIN ANALYZE` điền vào tài liệu minh chứng tối ưu.
