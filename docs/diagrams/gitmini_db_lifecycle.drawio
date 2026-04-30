@@ -1,0 +1,33 @@
+<mxfile host="app.diagrams.net" modified="2026-04-30T00:00:00.000Z" agent="Claude Code" version="24.7.17" type="device">
+  <diagram id="gitmini-db-lifecycle" name="GitMini DB Lifecycle">
+    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="950" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="GitMini - Lifecycle quản trị dữ liệu PostgreSQL" style="text;html=1;strokeColor=none;fillColor=none;fontSize=24;fontStyle=1" vertex="1" parent="1"><mxGeometry x="400" y="20" width="700" height="40" as="geometry" /></mxCell>
+        <mxCell id="req" value="1. Yêu cầu dữ liệu&#xa;Use case SCM&#xa;Repo, commit, issue, PR, member, audit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1" vertex="1" parent="1"><mxGeometry x="60" y="130" width="230" height="120" as="geometry" /></mxCell>
+        <mxCell id="model" value="2. Mô hình logic&#xa;Thực thể, quan hệ&#xa;Chuẩn hóa 3NF&#xa;Data dictionary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1" vertex="1" parent="1"><mxGeometry x="350" y="130" width="230" height="120" as="geometry" /></mxCell>
+        <mxCell id="migration" value="3. Migration SQL&#xa;01_schema&#xa;02_indexes&#xa;03_triggers&#xa;04_roles&#xa;05_rls" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1" vertex="1" parent="1"><mxGeometry x="640" y="120" width="230" height="150" as="geometry" /></mxCell>
+        <mxCell id="postgres" value="4. PostgreSQL Database&#xa;Schema + data&#xa;Constraints&#xa;Indexes&#xa;Triggers&#xa;RBAC/RLS" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=14" vertex="1" parent="1"><mxGeometry x="950" y="110" width="260" height="170" as="geometry" /></mxCell>
+        <mxCell id="seed" value="5. Seed data&#xa;scripts/seed_data.py&#xa;profile demo&#xa;profile benchmark" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1" vertex="1" parent="1"><mxGeometry x="640" y="360" width="230" height="130" as="geometry" /></mxCell>
+        <mxCell id="api" value="6. Backend API Query&#xa;/repos&#xa;/issues&#xa;/pulls&#xa;/analytics&#xa;/admin/audit-logs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1" vertex="1" parent="1"><mxGeometry x="950" y="360" width="260" height="150" as="geometry" /></mxCell>
+        <mxCell id="ui" value="7. UI minh chứng dữ liệu&#xa;React dashboard&#xa;History&#xa;Issues / PR&#xa;Analytics&#xa;Screenshot báo cáo" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1" vertex="1" parent="1"><mxGeometry x="950" y="610" width="260" height="160" as="geometry" /></mxCell>
+        <mxCell id="benchmark" value="Benchmark / tối ưu&#xa;EXPLAIN ANALYZE&#xa;B-tree / GIN&#xa;repo_stats vs COUNT(*)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1" vertex="1" parent="1"><mxGeometry x="350" y="610" width="260" height="140" as="geometry" /></mxCell>
+        <mxCell id="backup" value="Backup / Restore&#xa;pg_dump&#xa;pg_restore&#xa;WAL / PITR&#xa;Replication dự phòng" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1" vertex="1" parent="1"><mxGeometry x="60" y="610" width="240" height="150" as="geometry" /></mxCell>
+        <mxCell id="tests" value="Verification scripts&#xa;test_migrations.sh&#xa;sync_docker_db.sh&#xa;test_backend.sh&#xa;test_backup_restore.sh&#xa;/health smoke test" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" vertex="1" parent="1"><mxGeometry x="60" y="360" width="270" height="160" as="geometry" /></mxCell>
+        <mxCell id="note" value="Lifecycle này chứng minh nhóm quản trị CSDL theo vòng đời đầy đủ: phân tích → thiết kế → migration → seed → khai thác → tối ưu → bảo mật → backup/restore → kiểm chứng." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontStyle=1;fontSize=14" vertex="1" parent="1"><mxGeometry x="310" y="830" width="880" height="70" as="geometry" /></mxCell>
+        <mxCell id="e1" value="phân rã" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="req" target="model"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" value="chuyển thành SQL" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="model" target="migration"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" value="apply" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="migration" target="postgres"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" value="nạp dữ liệu" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="seed" target="postgres"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" value="query" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="postgres" target="api"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" value="hiển thị" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="api" target="ui"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" value="đo hiệu năng" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="postgres" target="benchmark"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" value="sao lưu" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="postgres" target="backup"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" value="kiểm chứng" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="tests" target="postgres"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" value="test migration" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="tests" target="migration"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e11" value="seed sau migration" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="migration" target="seed"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

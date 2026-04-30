@@ -1,73 +1,15 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>GitMini | Advanced SCM Dashboard</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/lucide@latest"></script>
-</head>
-<body class="dark-theme">
-    <div class="app-container">
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="logo">
-                <i data-lucide="git-branch"></i>
-                <span>GitMini</span>
-            </div>
-            <nav>
-                <div class="nav-item active" onclick="showSection('repos')">
-                    <i data-lucide="layout-dashboard"></i>
-                    <span>Repositories</span>
-                </div>
-                <div class="nav-item" onclick="showSection('issues')">
-                    <i data-lucide="alert-circle"></i>
-                    <span>Global Issues</span>
-                </div>
-                <div class="nav-item" onclick="showSection('pulls')">
-                    <i data-lucide="git-pull-request"></i>
-                    <span>Pull Requests</span>
-                </div>
-            </nav>
-            <div class="user-profile">
-                <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Lucky" alt="avatar">
-                <div class="user-info">
-                    <span class="username" id="display-user">Guest</span>
-                    <span class="status">Online</span>
-                </div>
-            </div>
-        </aside>
-
-        <!-- Main Content -->
-        <main class="main-content">
-            <header class="top-bar">
-                <div class="search-container">
-                    <i data-lucide="search"></i>
-                    <input type="text" id="global-search" placeholder="Search commits/issues (GIN Index)..." onkeyup="handleSearch(event)">
-                </div>
-                <div class="actions">
-                    <button class="btn-primary" onclick="openCreateRepo()">
-                        <i data-lucide="plus"></i> New Repo
-                    </button>
-                </div>
-            </header>
-
-            <section id="content-area">
-                <!-- Data will be injected here -->
-                <div class="loading">Loading assets...</div>
-            </section>
-        </main>
-    </div>
-
-    <!-- Modals -->
-    <div id="modal-overlay" class="modal-overlay hidden" onclick="closeModal()">
-        <div class="modal glass" onclick="event.stopPropagation()">
-            <div id="modal-content"></div>
-        </div>
-    </div>
-
-    <script src="app.js"></script>
-    <script>lucide.createIcons();</script>
-</body>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body class="dark-theme">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>
