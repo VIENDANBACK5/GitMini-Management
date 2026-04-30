@@ -1,0 +1,43 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-04-29T09:58:10.291Z",
+  "phase": "4",
+  "phase_name": "PR governance and branch protection",
+  "phase_dir": ".planning",
+  "plan": null,
+  "task": null,
+  "total_tasks": null,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 1, "name": "Repository membership management", "status": "done"},
+    {"id": 2, "name": "Login/session baseline", "status": "done"},
+    {"id": 3, "name": "Audit log and admin accountability", "status": "done"},
+    {"id": 4, "name": "PR governance and branch protection", "status": "done"}
+  ],
+  "remaining_tasks": [
+    {"id": 5, "name": "Test suite and permission regression checks", "status": "not_started"},
+    {"id": 6, "name": "Deployment, backup verification and observability", "status": "not_started"},
+    {"id": 7, "name": "UX polish, screenshots and final production-readiness handoff", "status": "not_started"}
+  ],
+  "blockers": [],
+  "human_actions_pending": [
+    {"action": "Manual browser smoke test and screenshots", "context": "No browser automation tool was available; Docker build and API smoke tests passed.", "blocking": false}
+  ],
+  "decisions": [
+    {"decision": "Use pull_request_reviews table for approvals", "rationale": "Approval is a separate PR workflow event and should preserve reviewer identity/time.", "phase": "4"},
+    {"decision": "Use branches.is_protected for protected branch policy", "rationale": "Field already existed and matches roadmap Phase 4 scope.", "phase": "4"},
+    {"decision": "Use temporary PostgreSQL containers for clean verification", "rationale": "User explicitly said not to reset/delete postgres_data.", "phase": "all"}
+  ],
+  "uncommitted_files": [
+    "sql/08_phase4_pr_governance.sql",
+    "backend/app/main.py",
+    "backend/app/queries.py",
+    "backend/app/schemas.py",
+    "frontend/src/App.jsx",
+    "docs/13_phan_quyen_nguoi_dung_va_luong_lam_viec_nhom.md",
+    "docs/02c_data_dictionary.md",
+    ".planning/STATE.md"
+  ],
+  "next_action": "Start Phase 5: add backend pytest/FastAPI TestClient regression tests and SQL migration smoke tests using temporary PostgreSQL containers.",
+  "context_notes": "Phase 4 was verified with python py_compile, docker compose build app, and a temporary PostgreSQL smoke test covering protected branch merge block, self-approval block, reviewer approval, developer merge denial, successful owner merge, and audit logs. Do not reset postgres_data."
+}
