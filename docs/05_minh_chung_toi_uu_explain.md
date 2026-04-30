@@ -67,7 +67,29 @@ SELECT * FROM commit_history LIMIT 50;
 
 ---
 
-## 4. Tổng hợp kết quả đo đạc
+## 4. Minh chứng hình ảnh thực tế từ Terminal
+
+Để chứng minh tính xác thực của các kết quả đo đạc trên, dưới đây là các hình ảnh chụp trực tiếp từ quá trình chạy `EXPLAIN ANALYZE` trong PostgreSQL:
+
+### 4.1. Truy vấn Commit History (Composite Index)
+*(Chèn ảnh kết quả Explain Analyze truy vấn Commit vào đây)*
+`![Minh chứng Commit History](../screenshots/05_explain_commit.png)`
+
+### 4.2. Tìm kiếm Issue (GIN Index)
+*(Chèn ảnh kết quả Explain Analyze truy vấn Issue vào đây)*
+`![Minh chứng Issue Search](../screenshots/05_explain_issue.png)`
+
+### 4.3. Duyệt cây Commit (Recursive CTE)
+*(Chèn ảnh kết quả Explain Analyze truy vấn CTE vào đây)*
+`![Minh chứng Recursive CTE](../screenshots/05_explain_cte.png)`
+
+### 4.4. Truy xuất Thống kê Dashboard (Trigger)
+*(Chèn ảnh kết quả Explain Analyze truy vấn Repo Stats vào đây)*
+`![Minh chứng Repo Stats](../screenshots/05_explain_stats.png)`
+
+---
+
+## 5. Tổng hợp kết quả đo đạc
 
 | Loại truy vấn | Dữ liệu kiểm thử | Kết quả đo (Execution Time) | Ghi chú |
 |:--- |:--- |:--- |:--- |
@@ -78,6 +100,6 @@ SELECT * FROM commit_history LIMIT 50;
 
 ---
 
-## 5. Kết luận
+## 6. Kết luận
 
 Các con số trên là minh chứng thực tế cho thấy việc thiết kế CSDL đúng đắn (chuẩn hóa kết hợp phi chuẩn hóa có kiểm soát) và tận dụng tối đa các tính năng của PostgreSQL (Index, CTE) đã giúp hệ thống GitMini đạt được hiệu năng rất cao, đáp ứng tốt quy mô của một hệ thống quản lý mã nguồn chuyên nghiệp.

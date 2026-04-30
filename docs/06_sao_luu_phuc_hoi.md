@@ -62,6 +62,20 @@ Một bản backup chỉ có giá trị khi nó có thể phục hồi được.
 
 ---
 
-## 5. Kết luận
+## 5. Minh chứng thực thi chạy Backup
+
+Để chứng minh quy trình sao lưu được thiết lập và hoạt động thành công, dưới đây là các hình ảnh chạy lệnh tạo bản sao lưu trực tiếp trên máy chủ:
+
+### 5.1. Chạy Logical Backup (pg_dump) thành công
+*(Chèn ảnh Terminal chạy lệnh pg_dump ra file .bak vào đây)*
+`![Minh chứng Logical Backup](../screenshots/06_backup_logical.png)`
+
+### 5.2. Chạy Physical Backup (pg_basebackup) thành công
+*(Chèn ảnh Terminal chạy lệnh pg_basebackup tạo các file hệ thống WAL vào đây)*
+`![Minh chứng Physical Backup](../screenshots/06_backup_physical.png)`
+
+---
+
+## 6. Kết luận
 
 Với sự kết hợp giữa `pg_dump` (linh hoạt) và `pg_basebackup + WAL` (an toàn tuyệt đối), hệ thống GitMini đảm bảo dữ liệu luôn có phương án dự phòng. Việc hiểu rõ sự khác biệt giữa sao lưu Logic và vật lý là kỹ năng cốt lõi của một quản trị viên CSDL chuyên nghiệp.
