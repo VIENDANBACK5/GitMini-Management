@@ -60,33 +60,78 @@ Khi cần reset môi trường hoặc sửa lại thiết kế, script `sql/00_d
 
 ---
 
-## 5. Seed dữ liệu mẫu (Seeding)
+## 5. Quy trình Seed dữ liệu mẫu (Data Seeding)
 
-Dự án cung cấp script `scripts/seed_data.py` để sinh dữ liệu tự động thay vì nhập tay. Script hỗ trợ hai chế độ chính:
-*   **Chế độ `demo`**: Sinh khoảng 1,000 commit và 300 issue. Phù hợp để chạy nhanh và trình diễn giao diện Web.
-*   **Chế độ `benchmark`**: Sinh 100,000 commit và 10,000 issue. Dùng để đo đạc hiệu năng thực tế bằng `EXPLAIN ANALYZE`.
+Sau khi cấu trúc bảng đã sẵn sàng, chúng ta cần nạp dữ liệu để hệ thống có thể hoạt động. Dự án sử dụng script `scripts/seed_data.py` được tối ưu hóa bằng thư viện `psycopg2` để thực hiện insert theo lô (bulk insert), đảm bảo tốc độ ngay cả với dữ liệu lớn.
+
+### 5.1. Các kịch bản Seeding (Profiles)
+*   **Kịch bản Demo (`--profile demo`)**:
+    *   **Khối lượng**: 100 users, 20 repos, ~1,000 commits, 300 issues.
+    *   **Mục đích**: Phục vụ việc trình diễn giao diện Web Dashboard, biểu đồ commit và các tính năng tương tác cơ bản.
+    *   **Thời gian thực hiện**: ~5-10 giây.
+*   **Kịch bản Benchmark (`--profile benchmark`)**:
+    *   **Khối lượng**: 1,000 users, 1,000 repos, 100,000 commits, 10,000 issues.
+    *   **Mục đích**: Kiểm tra ngưỡng chịu tải của hệ thống, đo đạc hiệu quả của Index và EXPLAIN ANALYZE trên các câu lệnh truy vấn phức tạp (Recursive CTE, GIN search).
+    *   **Thời gian thực hiện**: ~2-5 phút tùy cấu hình máy.
+
+### 5.2. Cách thực hiện Seed
+Bạn cần mở Terminal tại thư mục gốc của dự án và chạy lệnh:
+```bash
+# Nạp dữ liệu nhẹ để demo
+python scripts/seed_data.py --profile demo
+```
 
 ---
 
-## 6. Hướng dẫn khởi tạo CSDL chi tiết
+## 6. Hướng dẫn khởi tạo và Triển khai chi tiết
 
-Để dự án chạy đúng, bạn thực hiện theo các bước sau trong Terminal:
+Dưới đây là quy trình 4 bước để đưa hệ thống GitMini từ mã nguồn lên trạng thái hoạt động hoàn chỉnh.
 
-1.  **Khởi động Docker:**
-    ```bash
-    docker compose up -d db
-    ```
-    *Lưu ý: PostgreSQL chạy bên trong container ở cổng `5432`. Tuy nhiên, để tránh trùng với PostgreSQL cài sẵn trên máy (nếu có), project đã map cổng này ra cổng `5435` ở máy host.*
+### Bước 1: Cấu hình biến môi trường
+Hệ thống đọc thông tin kết nối từ file `.env`. Bạn hãy tạo file `.env` tại thư mục gốc với nội dung sau:
+```text
+DATABASE_URL=postgresql://gitmini_user:gitmini_password@localhost:5435/gitmini_db
+DB_HOST=localhost
+DB_PORT=5435
+DB_NAME=gitmini_db
+DB_USER=gitmini_user
+DB_PASS=gitmini_password
+```
+*Giải thích: `5435` là cổng kết nối từ máy bạn vào database bên trong Docker.*
 
-2.  **Cài đặt thư viện Python:**
-    ```bash
-    pip install psycopg2-binary python-dotenv
-    ```
+### Bước 2: Khởi động hạ tầng với Docker Compose
+Sử dụng Docker giúp môi trường CSDL được cô lập hoàn toàn, không gây xung đột với các phần mềm khác trên máy.
+```bash
+docker compose up -d db
+```
+*   **`-d`**: Chạy dưới nền (detached mode).
+*   **`db`**: Chỉ khởi động dịch vụ PostgreSQL.
+*   **Cơ chế lưu trữ**: Dữ liệu được ánh xạ (mount) vào volume `postgres_data` để đảm bảo khi tắt Docker dữ liệu không bị mất.
 
-3.  **Chạy script Seeding:**
-    ```bash
-    python scripts/seed_data.py --profile demo
-    ```
+### Bước 3: Cài đặt môi trường Python (Dành cho script vận hành)
+Để chạy các script seed dữ liệu và kiểm tra, bạn cần cài đặt các thư viện kết nối PostgreSQL:
+```bash
+# Cập nhật pip và cài đặt thư viện
+pip install psycopg2-binary python-dotenv
+```
+
+### Bước 4: Thực thi Migration và Kiểm tra
+Thông thường Docker sẽ tự động nạp các file trong thư mục `sql/` khi khởi tạo lần đầu. Tuy nhiên, nếu bạn muốn thực hiện thủ công hoặc cập nhật schema, hãy dùng lệnh:
+```bash
+# Truy cập vào container và chạy psql (Ví dụ nạp schema mở rộng)
+docker exec -i gitmini_db_container psql -U gitmini_user -d gitmini_db < sql/09_extend_to_20_tables.sql
+```
+
+**Cách kiểm tra hệ thống đã sẵn sàng:**
+Mở công cụ quản lý CSDL (như DBeaver, pgAdmin) hoặc dùng dòng lệnh để kiểm tra số lượng bảng:
+```sql
+-- Kiểm tra tổng số bảng (Phải ra kết quả 20)
+SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';
+
+-- Kiểm tra một vài bảng quan trọng
+SELECT * FROM repositories LIMIT 5;
+SELECT * FROM repo_stats;
+```
 
 ---
 
