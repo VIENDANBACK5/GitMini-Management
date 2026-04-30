@@ -20,49 +20,37 @@ Hệ thống sử dụng các script SQL thuần để quản trị CSDL, đảm
 
 ---
 
-## 3. Migration Up (Khởi tạo CSDL)
+## 3. Migration Up (Xây dựng cấu trúc 20 bảng CSDL)
 
-Quá trình khởi tạo được thực hiện theo trình tự từ lõi đến các thành phần mở rộng:
+Hệ thống được thiết kế theo kiến trúc module, chia làm 2 giai đoạn khởi tạo chính để đảm bảo tính logic và toàn vẹn dữ liệu:
 
-### 3.1. `sql/01_schema.sql` — Khởi tạo 11 bảng lõi
-Script này kích hoạt extension `uuid-ossp` để hỗ trợ kiểu dữ liệu UUID và tạo các bảng nền tảng bao gồm:
-1.  `users`: Thông tin tài khoản người dùng.
-2.  `repositories`: Kho mã nguồn.
-3.  `repo_members`: Thành viên và vai trò trong repo.
-4.  `commits`: Snapshot lịch sử (dùng `CHAR(40)` cho SHA-1 hash).
-5.  `commit_parents`: Quan hệ cha-con (cấu trúc DAG).
-6.  `branches`: Các con trỏ nhánh phát triển.
-7.  `issues`: Quản lý lỗi và yêu cầu.
-8.  `pull_requests`: Yêu cầu hợp nhất mã nguồn.
-9.  `pull_request_reviews`: Phê duyệt PR.
-10. `audit_logs`: Nhật ký hành động nhạy cảm.
-11. `repo_stats`: Bảng thống kê (phi chuẩn hóa).
+### 3.1. Giai đoạn 1: Khởi tạo 11 bảng thực thể lõi (`sql/01_schema.sql`)
+Đây là những thực thể quan trọng nhất, tạo nên khung xương của một hệ thống quản lý mã nguồn:
 
-### 3.2. `sql/02_indexes.sql` — Tối ưu hóa truy vấn
-Thiết lập các chỉ mục B-tree cho khóa ngoại, Composite index cho các luồng truy vấn lịch sử và GIN index cho tìm kiếm toàn văn bản (Full-text search).
+1.  **`users`**: Quản lý định danh. Lưu trữ thông tin tài khoản, mật khẩu (đã băm) và hồ sơ cá nhân. Đây là thực thể gốc để xác định quyền sở hữu và tác giả của mọi hành động trong hệ thống.
+2.  **`repositories`**: Thực thể trung tâm. Quản lý các dự án mã nguồn, thiết lập chế độ riêng tư (private/public) và định danh chủ sở hữu (owner).
+3.  **`repo_members`**: Quản lý phân quyền chi tiết. Cho phép mời nhiều người dùng vào một dự án với các vai trò khác nhau (Developer, Reviewer, Viewer), phục vụ luồng làm việc nhóm.
+4.  **`commits`**: Lưu trữ lịch sử mã nguồn. Mỗi bản ghi đại diện cho một "snapshot" trạng thái code tại một thời điểm, sử dụng mã băm SHA-1 (40 ký tự) làm khóa chính để đảm bảo tính duy nhất toàn cầu.
+5.  **`commit_parents`**: Mô hình hóa đồ thị DAG. Lưu quan hệ cha-con giữa các commit. Việc tách bảng này cho phép một commit có thể có nhiều cha (Merge Commit), giúp PostgreSQL truy vấn được toàn bộ lịch sử đệ quy bằng `WITH RECURSIVE`.
+6.  **`branches`**: Quản lý các nhánh phát triển. Bản chất là các con trỏ (pointer) trỏ đến commit mới nhất của từng nhánh, giúp người dùng làm việc song song trên nhiều tính năng mà không ảnh hưởng lẫn nhau.
+7.  **`issues`**: Theo dõi lỗi và yêu cầu. Hỗ trợ quy trình quản lý công việc, cho phép gắn nhãn (label) và giao việc cho các thành viên cụ thể.
+8.  **`pull_requests`**: Quản lý luồng hợp nhất code. Đây là nơi đề xuất thay đổi từ nhánh này sang nhánh khác, liên kết chặt chẽ với quy trình xét duyệt code.
+9.  **`pull_request_reviews`**: Kiểm soát chất lượng mã nguồn. Lưu trữ các phê duyệt (Approval) của Reviewer, là điều kiện bắt buộc trước khi một PR được phép merge vào các nhánh quan trọng.
+10. **`audit_logs`**: Nhật ký bảo mật. Ghi lại mọi hành động nhạy cảm như xóa repo, đổi quyền... phục vụ mục đích kiểm toán và truy vết sự cố.
+11. **`repo_stats`**: Tối ưu hóa hiệu năng Dashboard. Bảng này lưu trữ các số liệu tính toán sẵn (commit count, issue count) thông qua Trigger để Dashboard có thể hiển thị kết quả ngay lập tức mà không cần quét lại hàng triệu bản ghi.
 
-### 3.3. `sql/03_triggers.sql` — Tự động hóa thống kê
-Thiết lập các Trigger để đảm bảo tính nhất quán dữ liệu giữa các bảng nghiệp vụ và bảng `repo_stats`. Mọi thay đổi về commit, issue hay PR đều được cập nhật vào bảng thống kê ngay trong cùng một Transaction.
+### 3.2. Giai đoạn 2: Mở rộng 9 bảng quản trị và vận hành (`sql/09_extend_to_20_tables.sql`)
+Nhóm bảng này hoàn thiện các tính năng chuyên sâu của một nền tảng Git hiện đại:
 
-### 3.4. `sql/04_security_roles.sql` — Phân quyền RBAC
-Tạo các Role (`git_admin`, `git_developer`, `git_reviewer`) và phân quyền truy cập bảng tương ứng với từng vai trò.
-
-### 3.5. `sql/05_security_rls.sql` — Bảo mật RLS
-Kích hoạt chính sách bảo mật mức dòng để ngăn chặn việc người dùng xem dữ liệu từ các repository `is_private` mà họ không có quyền thành viên.
-
-### 3.6. `sql/08_phase4_pr_governance.sql` & `sql/09_extend_to_20_tables.sql` — Mở rộng 20 bảng
-Sau khi có các bảng lõi, hệ thống được mở rộng để phục vụ các tính năng quản trị nâng cao và vận hành hệ thống, bao gồm 9 bảng bổ sung:
-12. `file_blobs`: Lưu trữ nội dung file dạng Blob/Hash.
-13. `commit_files`: Quản lý các file thay đổi trong từng commit.
-14. `repository_languages`: Thống kê ngôn ngữ lập trình của dự án.
-15. `tags`: Đánh dấu các phiên bản quan trọng.
-16. `releases`: Quản lý các bản phát hành sản phẩm.
-17. `issue_comments`: Luồng thảo luận trong các Issue.
-18. `pull_request_comments`: Bình luận và Review code trong PR.
-19. `ci_runs`: Nhật ký kiểm thử tự động (CI/CD).
-20. `backup_jobs`: Nhật ký vận hành sao lưu và phục hồi dữ liệu.
-
-Việc mở rộng này giúp hệ thống đạt quy mô 20 bảng CSDL theo đúng yêu cầu đồ án, bao quát toàn bộ quy trình từ lưu trữ, bảo mật đến vận hành.
+12. **`file_blobs`**: Quản lý nội dung vật lý. Lưu trữ metadata và kích thước của các file mã nguồn. Sử dụng cơ chế hash nội dung để tránh lưu trùng lặp cùng một file nhiều lần.
+13. **`commit_files`**: Theo dõi thay đổi file. Ghi nhận chi tiết file nào được thêm mới, sửa đổi hoặc xóa bỏ trong từng commit cụ thể.
+14. **`repository_languages`**: Phân tích kỹ thuật. Thống kê tỷ lệ các ngôn ngữ lập trình trong dự án (ví dụ: 80% Python, 20% SQL), giúp người quản trị nắm bắt nhanh cấu trúc công nghệ.
+15. **`tags`**: Đánh dấu phiên bản. Lưu trữ các cột mốc quan trọng (ví dụ: v1.0, v2.0-release). Khác với branch, tag là các con trỏ cố định không thay đổi theo thời gian.
+16. **`releases`**: Quản lý phát hành sản phẩm. Gắn liền với Tag để cung cấp thông tin ghi chú phiên bản (release notes) và các file cài đặt cho người dùng cuối.
+17. **`issue_comments`**: Tương tác cộng tác. Cho phép các thành viên thảo luận, trao đổi ý kiến trực tiếp trên từng Issue.
+18. **`pull_request_comments`**: Đánh giá mã nguồn chi tiết. Hỗ trợ việc bình luận trực tiếp trên từng dòng code thay đổi trong Pull Request.
+19. **`ci_runs`**: Quản trị quy trình kiểm thử tự động. Ghi lại kết quả (Success/Failed) của các bản build CI/CD, giúp đảm bảo mã nguồn luôn ổn định trước khi merge.
+20. **`backup_jobs`**: Quản trị vận hành CSDL. Nhật ký ghi lại các phiên sao lưu và phục hồi dữ liệu thành công, đảm bảo hệ thống có khả năng phục hồi khi gặp sự cố.
 
 ---
 
