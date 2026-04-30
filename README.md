@@ -38,29 +38,61 @@ Tài liệu được tổ chức bám sát khung nội dung hướng dẫn của
 *   `docs/`: Tài liệu báo cáo chi tiết.
 *   `docs/diagrams/`: File sơ đồ kiến trúc và ERD (định dạng `.drawio`).
 
-## 3. Hướng dẫn chạy nhanh
+## 3. Hướng dẫn cài đặt và vận hành chi tiết
 
-### Yêu cầu hệ thống
-*   Docker & Docker Compose
-*   Python 3.10+ (để chạy seed dữ liệu)
+Để hệ thống hoạt động chính xác với đầy đủ dữ liệu mẫu và các tính năng tối ưu, hãy thực hiện theo các bước sau:
 
-### Các bước khởi tạo
-1.  **Khởi động CSDL:**
-    ```bash
-    docker compose up -d db
-    ```
-2.  **Khởi động Backend & Frontend:**
-    ```bash
-    docker compose up -d
-    ```
-3.  **Khởi tạo dữ liệu mẫu (Seed):**
+### 3.1. Yêu cầu tiên quyết
+*   **Docker & Docker Compose**: Dùng để chạy PostgreSQL 15.
+*   **Python 3.10+**: Dùng để chạy script seed dữ liệu mẫu.
+*   **Git**: Để quản lý mã nguồn.
+
+### 3.2. Bước 1: Khởi động Hạ tầng CSDL
+Hệ thống sử dụng Docker để cô lập môi trường database.
+```bash
+docker compose up -d db
+```
+*Lưu ý: Database sẽ lắng nghe tại cổng `5435` trên localhost để tránh xung đột với các bản cài đặt PostgreSQL có sẵn.*
+
+### 3.3. Bước 2: Cài đặt thư viện Python (để Seed dữ liệu)
+Bạn cần cài đặt các thư viện cần thiết để script seed có thể kết nối vào Database.
+```bash
+pip install psycopg2-binary python-dotenv
+```
+
+### 3.4. Bước 3: Khởi tạo dữ liệu mẫu (Seeding)
+Dữ liệu mẫu giúp các biểu đồ và Dashboard có nội dung để hiển thị.
+*   **Chế độ Demo (Nhanh):**
     ```bash
     python scripts/seed_data.py --profile demo
     ```
-4.  **Truy cập ứng dụng:**
-    *   Dashboard: `http://localhost:5173`
-    *   API Docs: `http://localhost:8000/docs`
+*   **Chế độ Benchmark (Dữ liệu lớn để test hiệu năng):**
+    ```bash
+    python scripts/seed_data.py --profile benchmark
+    ```
 
+### 3.5. Bước 4: Chạy Backend và Frontend
+Sau khi DB đã có dữ liệu, hãy khởi động toàn bộ ứng dụng:
+```bash
+docker compose up -d
+```
+
+### 3.6. Bước 5: Truy cập và Kiểm tra
+| Thành phần | URL Truy cập | Ghi chú |
+|:--- |:--- |:--- |
+| **User Interface** | `http://localhost:5173` | Giao diện Dashboard và Commit Graph. |
+| **API Swagger** | `http://localhost:8000/docs` | Tài liệu API và thử nghiệm truy vấn trực tiếp. |
+| **Database** | `localhost:5435` | Kết nối qua DBeaver/pgAdmin (User: `gitmini_user`). |
+
+### 3.7. Một số lệnh quản trị hữu ích
+*   **Xem logs ứng dụng:** `docker compose logs -f`
+*   **Dừng hệ thống:** `docker compose down`
+*   **Reset toàn bộ dữ liệu:** `docker compose down -v` (Lệnh này sẽ xóa cả Volume dữ liệu).
+*   **Kiểm tra trạng thái container:** `docker compose ps`
+
+---
+## 4. Minh chứng và Báo cáo
+Toàn bộ kết quả đo đạc hiệu năng và ảnh chụp màn hình vận hành được lưu trong thư mục `docs/` và `screenshots/`. Sinh viên có thể sử dụng các file này làm tài liệu bảo vệ trước hội đồng.
 ---
 **Nhóm thực hiện:** [minhmoidz]
 **Môn học:** Quản trị Cơ sở dữ liệu nâng cao
