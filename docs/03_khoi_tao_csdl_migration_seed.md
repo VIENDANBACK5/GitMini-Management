@@ -50,8 +50,19 @@ Tạo các Role (`git_admin`, `git_developer`, `git_reviewer`) và phân quyền
 ### 3.5. `sql/05_security_rls.sql` — Bảo mật RLS
 Kích hoạt chính sách bảo mật mức dòng để ngăn chặn việc người dùng xem dữ liệu từ các repository `is_private` mà họ không có quyền thành viên.
 
-### 3.6. `sql/08_phase4_pr_governance.sql` & `sql/09_extend_to_20_tables.sql`
-Hoàn thiện hệ thống bằng cách bổ sung các bảng mở rộng như `tags`, `releases`, `issue_comments`, `ci_runs`, `backup_jobs`... đưa tổng số bảng lên con số 20 để đáp ứng yêu cầu của đồ án.
+### 3.6. `sql/08_phase4_pr_governance.sql` & `sql/09_extend_to_20_tables.sql` — Mở rộng 20 bảng
+Sau khi có các bảng lõi, hệ thống được mở rộng để phục vụ các tính năng quản trị nâng cao và vận hành hệ thống, bao gồm 9 bảng bổ sung:
+12. `file_blobs`: Lưu trữ nội dung file dạng Blob/Hash.
+13. `commit_files`: Quản lý các file thay đổi trong từng commit.
+14. `repository_languages`: Thống kê ngôn ngữ lập trình của dự án.
+15. `tags`: Đánh dấu các phiên bản quan trọng.
+16. `releases`: Quản lý các bản phát hành sản phẩm.
+17. `issue_comments`: Luồng thảo luận trong các Issue.
+18. `pull_request_comments`: Bình luận và Review code trong PR.
+19. `ci_runs`: Nhật ký kiểm thử tự động (CI/CD).
+20. `backup_jobs`: Nhật ký vận hành sao lưu và phục hồi dữ liệu.
+
+Việc mở rộng này giúp hệ thống đạt quy mô 20 bảng CSDL theo đúng yêu cầu đồ án, bao quát toàn bộ quy trình từ lưu trữ, bảo mật đến vận hành.
 
 ---
 
