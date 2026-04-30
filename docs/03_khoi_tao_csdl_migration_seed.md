@@ -135,6 +135,17 @@ SELECT * FROM repo_stats;
 
 ---
 
-## 7. Kết luận
+---
+
+## 7. Minh chứng khởi tạo thực tế
+
+Dưới đây là hình ảnh kiểm tra trực tiếp từ Database sau khi thực hiện chạy các file SQL khởi tạo, xác nhận cấu trúc 20 bảng đã được tạo lập thành công:
+
+*(Chèn ảnh kết quả lệnh \dt vào đây)*
+![Danh sách 20 bảng](../screenshots/03_tables_list.png)
+
+---
+
+## 8. Kết luận
 
 Với hệ thống script đầy đủ từ khởi tạo đến seed dữ liệu lớn, project GitMini đảm bảo khả năng tái lập môi trường cực kỳ nhanh chóng. Việc sử dụng UUID làm khóa chính và Trigger để cập nhật thống kê giúp hệ thống vừa hiện đại, vừa đảm bảo tính nhất quán dữ liệu trong môi trường đa người dùng.

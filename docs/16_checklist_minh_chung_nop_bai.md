@@ -118,9 +118,43 @@ docker exec -it gitmini_db_container bash -c "pg_basebackup -U gitmini_user -D /
 
 ---
 
-## BƯỚC 5: Chèn ảnh vào tài liệu
+## BƯỚC 5: Chụp minh chứng cho file `03` (Khởi tạo) và `07` (Bảo mật)
 
-Sau khi đã có đủ ảnh trong thư mục `screenshots/`, bạn chỉ cần mở các file `04`, `05`, `06` và thêm cú pháp chèn ảnh của Markdown vào dưới các tiêu đề tương ứng.
+Bạn tiếp tục vào lại Database bằng lệnh:
+```bash
+docker exec -it gitmini_db_container psql -U gitmini_user -d gitmini_db
+```
+
+**Minh chứng file 03: Đếm số lượng 20 bảng thực tế**
+```sql
+\dt
+```
+*(Chụp kết quả hiện ra danh sách đúng 20 bảng)*
+
+**Minh chứng file 07 (Phần 1): Xem danh sách Role (RBAC)**
+```sql
+\du
+```
+*(Chụp màn hình thấy các role git_admin, git_developer, git_reviewer)*
+
+**Minh chứng file 07 (Phần 2): Thử nghiệm RLS (Chặn xem Repo Private)**
+```sql
+-- 1. Bật quyền Developer (người dùng thông thường)
+SET ROLE git_developer;
+-- 2. Gán ID phiên làm việc thành 1 user ngẫu nhiên không có quyền
+SET app.current_user_id = '00000000-0000-0000-0000-000000000000';
+-- 3. Truy vấn kho mã nguồn (sẽ chỉ thấy repo public, không thấy private của người khác)
+SELECT id, name, is_private FROM repositories LIMIT 5;
+```
+*(Chụp ảnh cho thấy RLS đang hoạt động và người dùng bị giới hạn quyền)*
+
+Gõ `\q` để thoát.
+
+---
+
+## BƯỚC 6: Chèn ảnh vào tài liệu
+
+Sau khi đã có đủ ảnh trong thư mục `screenshots/`, bạn chỉ cần mở các file `03`, `04`, `05`, `06`, `07` và thêm cú pháp chèn ảnh của Markdown vào dưới các tiêu đề tương ứng.
 
 Ví dụ, muốn chèn ảnh vào file `05`:
 ```markdown

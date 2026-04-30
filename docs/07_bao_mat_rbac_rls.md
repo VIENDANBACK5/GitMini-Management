@@ -69,6 +69,20 @@ Mọi thao tác quan trọng như xóa repository, thay đổi quyền thành vi
 
 ---
 
-## 6. Kết luận
+## 6. Minh chứng thực thi bảo mật
+
+Để chứng minh các chính sách bảo mật đã được thiết lập thành công và thực sự ngăn chặn truy cập trái phép, dưới đây là các kết quả thực nghiệm từ hệ thống CSDL:
+
+### 6.1. Danh sách Phân quyền RBAC
+*(Chèn ảnh kết quả lệnh \du hiển thị các roles vào đây)*
+![Minh chứng Role RBAC](../screenshots/07_security_rbac.png)
+
+### 6.2. Hoạt động của RLS (Ngăn chặn xem Repo Private)
+*(Chèn ảnh thử nghiệm truy vấn Repo Private với user giả mạo vào đây)*
+![Minh chứng RLS block access](../screenshots/07_security_rls.png)
+
+---
+
+## 7. Kết luận
 
 Bằng việc kết hợp chặt chẽ giữa RBAC và RLS, GitMini tạo ra một "pháo đài" bảo mật dữ liệu vững chắc. Ngay cả khi code ứng dụng có lỗ hổng, tầng Database vẫn sẽ ngăn chặn việc rò rỉ dữ liệu của các repository private nhờ vào các chính sách RLS đã được thiết lập chặt chẽ.
