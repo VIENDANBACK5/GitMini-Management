@@ -13,6 +13,14 @@ CREATE INDEX IF NOT EXISTS idx_parents_parent ON commit_parents(parent_hash);
 CREATE INDEX IF NOT EXISTS idx_branches_repo ON branches(repo_id);
 CREATE INDEX IF NOT EXISTS idx_issues_repo ON issues(repo_id);
 CREATE INDEX IF NOT EXISTS idx_pr_repo ON pull_requests(repo_id);
+CREATE INDEX IF NOT EXISTS idx_pr_reviews_pull_request ON pull_request_reviews(pull_request_id);
+CREATE INDEX IF NOT EXISTS idx_pr_reviews_reviewer ON pull_request_reviews(reviewer_id);
+CREATE INDEX IF NOT EXISTS idx_repo_members_user_role ON repo_members(user_id, role);
+CREATE INDEX IF NOT EXISTS idx_repo_members_repo_role ON repo_members(repo_id, role);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_created ON audit_logs(actor_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_repo_created ON audit_logs(repo_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action_created ON audit_logs(action, created_at DESC);
 
 -- 2. Chỉ mục phức hợp (Composite Indexes) cho các luồng truy vấn chính
 -- Tối ưu hóa việc lấy lịch sử commit (Git Log) sắp xếp theo thời gian

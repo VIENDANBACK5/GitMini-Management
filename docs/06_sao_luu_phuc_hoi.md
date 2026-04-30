@@ -88,7 +88,25 @@ echo "Backup completed: $BACKUP_DIR/gitmini_$DATE.sql.gz"
 
 ---
 
-## 5. Kết nối dự phòng (Streaming Replication)
+## 5. Kiểm chứng backup/restore trên database tạm
+
+Không reset hoặc xóa `postgres_data/` để kiểm tra phục hồi. Dùng lệnh sau để tạo source DB tạm, seed demo, dump, restore sang DB tạm khác và kiểm tra dữ liệu chính:
+
+```bash
+bash scripts/test_backup_restore.sh
+```
+
+Kỳ vọng:
+
+```text
+Backup/restore test passed using temporary PostgreSQL containers.
+```
+
+Script này chỉ dừng các container tạm `gitmini_backup_source_db` và `gitmini_backup_restore_db`, sau đó xóa thư mục dump tạm do chính script tạo.
+
+---
+
+## 6. Kết nối dự phòng (Streaming Replication)
 Để trả lời câu hỏi "làm thêm 1 db backup ntn nếu bên cũ hỏng", PostgreSQL cung cấp cơ chế **Streaming Replication (Master-Slave)**.
 
 ### a. Mô hình hoạt động

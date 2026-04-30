@@ -1,0 +1,31 @@
+<mxfile host="app.diagrams.net" modified="2026-04-30T00:00:00.000Z" agent="draw.io" version="24.7.17" type="device">
+  <diagram id="gitmini-db-architecture" name="GitMini CSDL Architecture">
+    <mxGraphModel dx="1600" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="950" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="GitMini - Kiến trúc quản trị CSDL PostgreSQL" style="text;html=1;strokeColor=none;fillColor=none;fontSize=24;fontStyle=1" vertex="1" parent="1"><mxGeometry x="360" y="20" width="700" height="40" as="geometry" /></mxCell>
+        <mxCell id="frontend" value="Frontend React&#xa;Màn hình demo&#xa;- Repositories&#xa;- History&#xa;- Issues / Pull Requests&#xa;- Analytics" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1" vertex="1" parent="1"><mxGeometry x="80" y="120" width="240" height="150" as="geometry" /></mxCell>
+        <mxCell id="backend" value="FastAPI Backend&#xa;Lớp kiểm chứng nghiệp vụ&#xa;- Auth/session&#xa;- Permission check&#xa;- API query&#xa;- Audit action" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1" vertex="1" parent="1"><mxGeometry x="440" y="120" width="260" height="150" as="geometry" /></mxCell>
+        <mxCell id="postgres" value="PostgreSQL 15&#xa;Nguồn sự thật của hệ thống&#xa;- Dữ liệu nghiệp vụ&#xa;- Ràng buộc toàn vẹn&#xa;- Bảo mật dữ liệu&#xa;- Tối ưu truy vấn" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=14" vertex="1" parent="1"><mxGeometry x="830" y="100" width="300" height="190" as="geometry" /></mxCell>
+        <mxCell id="schema" value="Schema &amp; Constraints&#xa;sql/01_schema.sql&#xa;PK, FK, UNIQUE, CHECK&#xa;Bảo đảm toàn vẹn dữ liệu" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1" vertex="1" parent="1"><mxGeometry x="80" y="420" width="250" height="130" as="geometry" /></mxCell>
+        <mxCell id="indexes" value="Indexes &amp; Benchmark&#xa;sql/02_indexes.sql&#xa;B-tree, GIN&#xa;EXPLAIN ANALYZE" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1" vertex="1" parent="1"><mxGeometry x="370" y="420" width="250" height="130" as="geometry" /></mxCell>
+        <mxCell id="triggers" value="Triggers &amp; repo_stats&#xa;sql/03_triggers.sql&#xa;Tự động cập nhật thống kê&#xa;Phi chuẩn hóa có kiểm soát" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1" vertex="1" parent="1"><mxGeometry x="660" y="420" width="270" height="130" as="geometry" /></mxCell>
+        <mxCell id="security" value="Security&#xa;sql/04_security_roles.sql&#xa;sql/05_security_rls.sql&#xa;RBAC, RLS, permission" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1" vertex="1" parent="1"><mxGeometry x="970" y="420" width="270" height="130" as="geometry" /></mxCell>
+        <mxCell id="audit" value="Audit Log&#xa;audit_logs&#xa;Ai làm gì, lúc nào, trên đối tượng nào&#xa;Accountability" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1" vertex="1" parent="1"><mxGeometry x="140" y="660" width="280" height="130" as="geometry" /></mxCell>
+        <mxCell id="backup" value="Backup / Restore&#xa;pg_dump / pg_restore&#xa;WAL / PITR / Replication&#xa;scripts/test_backup_restore.sh" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" vertex="1" parent="1"><mxGeometry x="520" y="660" width="310" height="130" as="geometry" /></mxCell>
+        <mxCell id="ops" value="Deployment &amp; Observability&#xa;Docker Compose&#xa;/health&#xa;Migration sync&#xa;scripts/sync_docker_db.sh" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1" vertex="1" parent="1"><mxGeometry x="930" y="660" width="300" height="130" as="geometry" /></mxCell>
+        <mxCell id="note" value="Thông điệp khi bảo vệ: Web/API chỉ là lớp minh chứng. Trọng tâm quản trị CSDL nằm ở PostgreSQL: schema, ràng buộc, index, trigger, bảo mật, audit, backup/restore và benchmark." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#000000;fontSize=14;fontStyle=1" vertex="1" parent="1"><mxGeometry x="290" y="840" width="800" height="70" as="geometry" /></mxCell>
+        <mxCell id="e1" value="HTTP/UI" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="frontend" target="backend"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" value="SQL queries" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="backend" target="postgres"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" value="managed by" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="postgres" target="schema"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" value="optimized by" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="postgres" target="indexes"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" value="automated by" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="postgres" target="triggers"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" value="protected by" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="postgres" target="security"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" value="writes" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="backend" target="audit"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" value="operated by" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="postgres" target="backup"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" value="monitored by" style="endArrow=block;html=1;strokeWidth=2" edge="1" parent="1" source="postgres" target="ops"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

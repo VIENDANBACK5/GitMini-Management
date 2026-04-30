@@ -55,16 +55,24 @@ Thay vì sử dụng tài khoản siêu quản trị (superuser), GitMini sử d
 ## 3. Bảo mật hàng dữ liệu (Row-Level Security - RLS)
 Đây là "Vũ khí bí mật" của PostgreSQL giúp triển khai mô hình Multi-tenant (Nhiều người dùng chung một bảng).
 
-*   **Mục tiêu:** Đảm bảo User A không bao giờ nhìn thấy hoặc can thiệp vào mã nguồn của User B trong các repository riêng tư (private).
-*   **Triển khai:**
+*   **Mục tiêu:** Đảm bảo User A không bao giờ nhìn thấy hoặc can thiệp vào mã nguồn của User B trong các repository riêng tư (private), trừ khi User A là owner hoặc member của repository đó.
+*   **Triển khai Phase 8:** RLS được mở rộng theo membership trong bảng `repo_members`.
     ```sql
     ALTER TABLE repositories ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE repo_members ENABLE ROW LEVEL SECURITY;
 
     CREATE POLICY repo_access_policy ON repositories
     FOR SELECT
     USING (
-        is_private = FALSE 
-        OR owner_id = (SELECT id FROM users WHERE username = current_user)
+        current_setting('app.current_username', true) = 'admin'
+        OR is_private = FALSE
+        OR owner_id::text = current_setting('app.current_user_id', true)
+        OR EXISTS (
+            SELECT 1
+            FROM repo_members rm
+            WHERE rm.repo_id = repositories.id
+              AND rm.user_id::text = current_setting('app.current_user_id', true)
+        )
     );
     ```
 

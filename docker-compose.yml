@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
   # --- Database Service ---
   db:
-    image: postgres:12.15
+    image: postgres:15
     container_name: gitmini_db_container
     environment:
       POSTGRES_USER: gitmini_user
@@ -13,13 +11,26 @@ services:
       - "5435:5432"
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
-      # Tự động chạy tất cả các script SQL khi khởi tạo lần đầu
-      - ./sql:/docker-entrypoint-initdb.d
+      # Chỉ tự động chạy migration up khi khởi tạo lần đầu; down/benchmark chạy thủ công
+      - ./sql/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./sql/02_indexes.sql:/docker-entrypoint-initdb.d/02_indexes.sql
+      - ./sql/03_triggers.sql:/docker-entrypoint-initdb.d/03_triggers.sql
+      - ./sql/04_security_roles.sql:/docker-entrypoint-initdb.d/04_security_roles.sql
+      - ./sql/05_security_rls.sql:/docker-entrypoint-initdb.d/05_security_rls.sql
+      - ./sql/08_phase4_pr_governance.sql:/docker-entrypoint-initdb.d/08_phase4_pr_governance.sql
+      - ./sql/09_extend_to_20_tables.sql:/docker-entrypoint-initdb.d/09_extend_to_20_tables.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gitmini_user -d gitmini_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: always
 
-  # --- Backend Service ---
+  # --- Backend + React Web Service ---
   app:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: gitmini_app_container
     environment:
       # Kết nối tới container 'db' thay vì localhost
@@ -30,9 +41,14 @@ services:
       - ./data/repos:/home/chung/lab/CSDL/data/repos
       - ./backend/gitserver:/app/gitserver
       - ./backend/scripts:/app/scripts
-      - ./frontend:/app/frontend
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3).read()\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: always
 
 volumes:
