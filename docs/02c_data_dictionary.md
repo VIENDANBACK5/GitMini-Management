@@ -4,7 +4,7 @@
 
 Tài liệu này mô tả chi tiết lược đồ vật lý và từ điển dữ liệu của hệ thống GitMini. Nội dung được xây dựng dựa trên script `sql/01_schema.sql`, sử dụng hệ quản trị PostgreSQL.
 
-GitMini có các bảng chính:
+GitMini có 20 bảng chính:
 
 1. `users`
 2. `repositories`
@@ -17,6 +17,15 @@ GitMini có các bảng chính:
 9. `pull_request_reviews`
 10. `audit_logs`
 11. `repo_stats`
+12. `file_blobs`
+13. `commit_files`
+14. `repository_languages`
+15. `tags`
+16. `releases`
+17. `issue_comments`
+18. `pull_request_comments`
+19. `ci_runs`
+20. `backup_jobs`
 
 ---
 
@@ -327,6 +336,31 @@ Lưu dữ liệu thống kê đã tính sẵn cho repository nhằm tối ưu da
 
 ---
 
+## 3.10. Nhóm bảng mở rộng schema 20 bảng
+
+Các bảng sau được bổ sung trong `sql/09_extend_to_20_tables.sql` để mô hình hóa đầy đủ hơn dữ liệu quản trị mã nguồn, phát hành, bình luận, CI và vận hành backup.
+
+| Bảng | Mục đích | Khóa chính | Khóa ngoại/ràng buộc chính |
+|---|---|---|---|
+| `file_blobs` | Lưu nội dung hoặc metadata blob file theo hash | `id UUID` | `blob_hash UNIQUE`, `size_bytes >= 0` |
+| `commit_files` | Lưu danh sách file thay đổi trong từng commit | `(commit_hash, file_path)` | `commit_hash -> commits`, `blob_id -> file_blobs`, `change_type` thuộc `added/modified/deleted/renamed` |
+| `repository_languages` | Lưu tỷ lệ ngôn ngữ của repository | `(repo_id, language)` | `repo_id -> repositories`, `percentage` từ 0 đến 100 |
+| `tags` | Lưu tag version trong repository | `id UUID` | `repo_id -> repositories`, `target_commit_hash -> commits`, `UNIQUE(repo_id, name)` |
+| `releases` | Lưu bản phát hành gắn với tag | `id UUID` | `repo_id -> repositories`, `tag_id -> tags`, `published_by -> users` |
+| `issue_comments` | Lưu bình luận trong issue | `id UUID` | `issue_id -> issues`, `author_id -> users` |
+| `pull_request_comments` | Lưu bình luận/review comment trong PR | `id UUID` | `pull_request_id -> pull_requests`, `author_id -> users`, `line_number > 0` nếu có |
+| `ci_runs` | Lưu lịch sử chạy CI theo repo/commit/PR | `id UUID` | `repo_id -> repositories`, `commit_hash -> commits`, `pull_request_id -> pull_requests`, `status` thuộc `queued/running/success/failed/cancelled` |
+| `backup_jobs` | Lưu lịch sử job backup và restore test | `id UUID` | `job_type` thuộc `full/restore_test`, `status` thuộc `running/success/failed`, `metadata JSONB` |
+
+### Ý nghĩa quản trị CSDL
+
+- Nhóm bảng `file_blobs`, `commit_files`, `repository_languages`, `tags`, `releases` làm rõ dữ liệu mã nguồn và phát hành thay vì chỉ dừng ở commit tổng quát.
+- Nhóm bảng `issue_comments`, `pull_request_comments`, `ci_runs` hỗ trợ quy trình làm việc nhóm, review và kiểm thử tự động.
+- Bảng `backup_jobs` giúp phần backup/restore có dữ liệu vận hành để truy vấn, audit và trình bày trong môn Quản trị CSDL.
+- Các bảng mới đều có `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS` và được đưa vào script kiểm thử migration để chứng minh chạy lại an toàn.
+
+---
+
 ## 4. Tổng kết ràng buộc chính
 
 | Loại ràng buộc | Vị trí sử dụng | Mục đích |
@@ -343,4 +377,4 @@ Lưu dữ liệu thống kê đã tính sẵn cho repository nhằm tối ưu da
 
 ## 5. Kết luận
 
-Lược đồ vật lý của GitMini sử dụng PostgreSQL để triển khai các bảng nghiệp vụ chính cho repository, membership, issue, pull request, review, audit và thống kê. Các bảng nghiệp vụ chính được thiết kế theo hướng chuẩn hóa, trong khi `repo_stats` được phi chuẩn hóa có kiểm soát để tối ưu truy vấn dashboard. Thiết kế `commits` kết hợp `commit_parents` là điểm cốt lõi giúp hệ thống biểu diễn lịch sử commit dạng DAG và hỗ trợ merge commit nhiều parent.
+Lược đồ vật lý của GitMini sử dụng PostgreSQL để triển khai 20 bảng nghiệp vụ và quản trị cho repository, membership, commit graph, file change, language analytics, tag/release, issue, pull request, review, CI, audit, backup và thống kê. Các bảng nghiệp vụ chính được thiết kế theo hướng chuẩn hóa, trong khi `repo_stats` được phi chuẩn hóa có kiểm soát để tối ưu truy vấn dashboard. Thiết kế `commits` kết hợp `commit_parents` là điểm cốt lõi giúp hệ thống biểu diễn lịch sử commit dạng DAG và hỗ trợ merge commit nhiều parent.

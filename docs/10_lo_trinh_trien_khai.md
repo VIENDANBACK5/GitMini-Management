@@ -31,7 +31,7 @@ Tài liệu liên quan:
 
 Nội dung đã thực hiện:
 
-1. Tạo schema PostgreSQL cho users, repositories, commits, commit_parents, branches, issues, pull_requests, repo_stats.
+1. Tạo schema PostgreSQL 20 bảng cho users, repositories, membership, commit graph, file changes, issues, pull requests, releases, CI, audit, backup và repo_stats.
 2. Tạo khóa chính, khóa ngoại, ràng buộc dữ liệu.
 3. Tạo index B-tree và GIN.
 4. Tạo trigger cập nhật `repo_stats`.

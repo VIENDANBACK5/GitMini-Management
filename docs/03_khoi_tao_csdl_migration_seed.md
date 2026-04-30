@@ -13,7 +13,10 @@ sql/02_indexes.sql
 sql/03_triggers.sql
 sql/04_security_roles.sql
 sql/05_security_rls.sql
+sql/08_phase4_pr_governance.sql
+sql/09_extend_to_20_tables.sql
 sql/06_benchmark_queries.sql
+sql/07_analytics_queries.sql
 scripts/seed_data.py
 ```
 
@@ -25,14 +28,17 @@ Khi dựng database mới, cần chạy theo thứ tự sau:
 
 | Thứ tự | Script | Mục đích |
 |---:|---|---|
-| 1 | `sql/01_schema.sql` | Tạo extension và 8 bảng chính |
+| 1 | `sql/01_schema.sql` | Tạo extension và 11 bảng nền tảng |
 | 2 | `sql/02_indexes.sql` | Tạo index phục vụ truy vấn và tìm kiếm |
 | 3 | `sql/03_triggers.sql` | Tạo function và trigger cập nhật `repo_stats` |
 | 4 | `sql/04_security_roles.sql` | Tạo role và phân quyền RBAC |
 | 5 | `sql/05_security_rls.sql` | Bật Row-Level Security và tạo policy |
-| 6 | `scripts/seed_data.py` | Sinh dữ liệu mẫu phục vụ demo/benchmark |
+| 6 | `sql/08_phase4_pr_governance.sql` | Bổ sung bảng approval PR |
+| 7 | `sql/09_extend_to_20_tables.sql` | Bổ sung 9 bảng mở rộng để đủ 20 bảng CSDL |
+| 8 | `scripts/seed_data.py` | Sinh dữ liệu mẫu phục vụ demo/benchmark cho cả schema 20 bảng |
 | Thủ công | `sql/00_down.sql` | Rollback schema khi cần reset môi trường |
 | Thủ công | `sql/06_benchmark_queries.sql` | Chạy `EXPLAIN ANALYZE` sau khi có dữ liệu seed |
+| Thủ công | `sql/07_analytics_queries.sql` | Chạy truy vấn analytics phục vụ báo cáo |
 
 ---
 
@@ -52,6 +58,8 @@ Script này thực hiện:
 - Tạo bảng `branches`.
 - Tạo bảng `issues`.
 - Tạo bảng `pull_requests`.
+- Tạo bảng `pull_request_reviews`.
+- Tạo bảng `audit_logs`.
 - Tạo bảng `repo_stats`.
 
 Các loại ràng buộc được dùng:
@@ -117,11 +125,32 @@ Script này tạo các role:
 Script này bật RLS trên các bảng quan trọng:
 
 - `repositories`
+- `repo_members`
 - `commits`
 - `issues`
 - `pull_requests`
 
-Mục tiêu là hạn chế truy cập dữ liệu theo từng dòng. Ví dụ repository private chỉ chủ sở hữu được xem.
+Mục tiêu là hạn chế truy cập dữ liệu theo từng dòng. Ví dụ repository private chỉ chủ sở hữu hoặc thành viên được xem.
+
+### 3.6. `sql/08_phase4_pr_governance.sql` — Tạo bảng review PR
+
+Script này đảm bảo bảng `pull_request_reviews` và index liên quan tồn tại để phục vụ chính sách protected branch: PR muốn merge vào nhánh bảo vệ phải có approval hợp lệ.
+
+### 3.7. `sql/09_extend_to_20_tables.sql` — Mở rộng schema lên 20 bảng
+
+Script này bổ sung 9 bảng:
+
+- `file_blobs`
+- `commit_files`
+- `repository_languages`
+- `tags`
+- `releases`
+- `issue_comments`
+- `pull_request_comments`
+- `ci_runs`
+- `backup_jobs`
+
+Các bảng này giúp báo cáo thể hiện rõ hơn phần quản trị dữ liệu mã nguồn: file/blob, tag/release, comment, CI và lịch sử backup/restore.
 
 ---
 
@@ -170,15 +199,25 @@ Script hiện hỗ trợ hai profile:
 
 ### 5.3. Dữ liệu được sinh
 
-Script hiện tạo dữ liệu cho:
+Script hiện tạo dữ liệu cho toàn bộ schema 20 bảng, bao gồm:
 
 - `users`
 - `repositories`
+- `repo_members`
 - `commits`
 - `commit_parents`
 - `branches`
 - `issues`
 - `pull_requests`
+- `file_blobs`
+- `commit_files`
+- `repository_languages`
+- `tags`
+- `releases`
+- `issue_comments`
+- `pull_request_comments`
+- `ci_runs`
+- `backup_jobs`
 
 Dữ liệu branch gồm các nhánh mẫu:
 

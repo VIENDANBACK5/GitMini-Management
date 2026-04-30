@@ -55,6 +55,17 @@ COMMIT_KEYWORDS = [
 ]
 
 BRANCH_NAMES = ["main", "develop", "feature/login", "feature/search", "bugfix/dashboard"]
+FILE_PATHS = [
+    "README.md",
+    "src/main.py",
+    "src/auth.py",
+    "src/repository.py",
+    "frontend/App.jsx",
+    "sql/schema.sql",
+    "docs/design.md",
+]
+LANGUAGES = [("SQL", 45.0), ("Python", 35.0), ("JavaScript", 20.0)]
+CI_STATUSES = ["success", "success", "failed", "running", "queued"]
 DEMO_USERS = [
     ("admin", "admin@gitmini.local", "GitMini Admin", "Quản trị viên demo xem toàn hệ thống"),
     ("alice", "alice@gitmini.local", "Alice Owner", "Owner demo có toàn quyền repository"),
@@ -294,14 +305,17 @@ def seed_branches(cur, repo_ids, commits_by_repo, batch_size):
 
 def seed_issues(cur, count, repo_ids, user_ids, batch_size):
     rows = []
+    issue_ids = []
     for i in range(count):
+        issue_id = str(uuid.uuid4())
+        issue_ids.append(issue_id)
         keyword = ISSUE_KEYWORDS[i % len(ISSUE_KEYWORDS)]
         status = "closed" if i % 4 == 0 else "open"
         created_at = datetime.now() - timedelta(hours=i)
         closed_at = created_at + timedelta(hours=4) if status == "closed" else None
         rows.append(
             (
-                str(uuid.uuid4()),
+                issue_id,
                 repo_ids[i % len(repo_ids)],
                 user_ids[i % len(user_ids)],
                 user_ids[(i + 7) % len(user_ids)],
@@ -335,14 +349,18 @@ def seed_issues(cur, count, repo_ids, user_ids, batch_size):
         rows,
         batch_size,
     )
+    return issue_ids
 
 
 def seed_pull_requests(cur, count, repo_ids, user_ids, commits_by_repo, batch_size):
     rows = []
+    pull_request_ids = []
     statuses = ["open", "open", "closed", "merged"]
     source_branches = ["develop", "feature/login", "feature/search", "bugfix/dashboard"]
 
     for i in range(count):
+        pull_request_id = str(uuid.uuid4())
+        pull_request_ids.append(pull_request_id)
         repo_id = repo_ids[i % len(repo_ids)]
         status = statuses[i % len(statuses)]
         commit_hashes = commits_by_repo.get(repo_id, [])
@@ -353,7 +371,7 @@ def seed_pull_requests(cur, count, repo_ids, user_ids, commits_by_repo, batch_si
 
         rows.append(
             (
-                str(uuid.uuid4()),
+                pull_request_id,
                 repo_id,
                 user_ids[i % len(user_ids)],
                 f"Pull request {i}: {COMMIT_KEYWORDS[i % len(COMMIT_KEYWORDS)]}",
@@ -389,6 +407,208 @@ def seed_pull_requests(cur, count, repo_ids, user_ids, commits_by_repo, batch_si
         rows,
         batch_size,
     )
+    return pull_request_ids
+
+
+def seed_extended_tables(cur, repo_ids, user_ids, commits_by_repo, issue_ids, pull_request_ids, batch_size):
+    all_commits = [commit_hash for hashes in commits_by_repo.values() for commit_hash in hashes]
+    if not all_commits:
+        return
+
+    blob_rows = []
+    blob_ids = []
+    for i, path in enumerate(FILE_PATHS):
+        blob_id = str(uuid.uuid4())
+        blob_ids.append(blob_id)
+        blob_rows.append((blob_id, random_hash(), f"Sample content for {path}", 100 + i * 25, "text/plain"))
+
+    batched_insert(
+        cur,
+        """
+        INSERT INTO file_blobs (id, blob_hash, content, size_bytes, mime_type)
+        VALUES %s
+        ON CONFLICT (blob_hash) DO NOTHING
+        """,
+        blob_rows,
+        batch_size,
+    )
+
+    commit_file_rows = []
+    for i, commit_hash in enumerate(all_commits[: max(len(repo_ids) * 5, 1)]):
+        commit_file_rows.append(
+            (
+                commit_hash,
+                FILE_PATHS[i % len(FILE_PATHS)],
+                blob_ids[i % len(blob_ids)],
+                ["added", "modified", "deleted", "renamed"][i % 4],
+                i % 30,
+                i % 12,
+            )
+        )
+
+    batched_insert(
+        cur,
+        """
+        INSERT INTO commit_files (commit_hash, file_path, blob_id, change_type, additions, deletions)
+        VALUES %s
+        ON CONFLICT (commit_hash, file_path) DO UPDATE SET
+            blob_id = EXCLUDED.blob_id,
+            change_type = EXCLUDED.change_type,
+            additions = EXCLUDED.additions,
+            deletions = EXCLUDED.deletions
+        """,
+        commit_file_rows,
+        batch_size,
+    )
+
+    language_rows = []
+    for repo_id in repo_ids:
+        for language, percentage in LANGUAGES:
+            language_rows.append((repo_id, language, int(50_000 * percentage), percentage))
+
+    batched_insert(
+        cur,
+        """
+        INSERT INTO repository_languages (repo_id, language, bytes_count, percentage)
+        VALUES %s
+        ON CONFLICT (repo_id, language) DO UPDATE SET
+            bytes_count = EXCLUDED.bytes_count,
+            percentage = EXCLUDED.percentage
+        """,
+        language_rows,
+        batch_size,
+    )
+
+    tag_rows = []
+    tag_ids = []
+    for i, repo_id in enumerate(repo_ids):
+        tag_id = str(uuid.uuid4())
+        tag_ids.append(tag_id)
+        tag_rows.append((tag_id, repo_id, f"v1.{i}.0", commits_by_repo[repo_id][-1], user_ids[i % len(user_ids)]))
+
+    batched_insert(
+        cur,
+        """
+        INSERT INTO tags (id, repo_id, name, target_commit_hash, created_by)
+        VALUES %s
+        ON CONFLICT (repo_id, name) DO UPDATE SET
+            target_commit_hash = EXCLUDED.target_commit_hash,
+            created_by = EXCLUDED.created_by
+        """,
+        tag_rows,
+        batch_size,
+    )
+
+    cur.execute(
+        "SELECT repo_id, name, id FROM tags WHERE repo_id = ANY(%s::uuid[])",
+        (repo_ids,),
+    )
+    tag_ids_by_repo_name = {(str(row[0]), row[1]): str(row[2]) for row in cur.fetchall()}
+
+    release_rows = []
+    for i, repo_id in enumerate(repo_ids):
+        release_rows.append(
+            (
+                str(uuid.uuid4()),
+                repo_id,
+                tag_ids_by_repo_name[(repo_id, f"v1.{i}.0")],
+                f"GitMini release v1.{i}.0",
+                "Release record generated by GitMini seed script.",
+                i % 3 == 0,
+                user_ids[i % len(user_ids)],
+            )
+        )
+
+    batched_insert(
+        cur,
+        """
+        INSERT INTO releases (id, repo_id, tag_id, title, description, is_prerelease, published_by)
+        VALUES %s
+        ON CONFLICT DO NOTHING
+        """,
+        release_rows,
+        batch_size,
+    )
+
+    issue_comment_rows = []
+    for i, issue_id in enumerate(issue_ids[: max(len(repo_ids) * 3, 1)]):
+        issue_comment_rows.append((str(uuid.uuid4()), issue_id, user_ids[i % len(user_ids)], f"Issue comment {i} for GitMini demo."))
+
+    batched_insert(
+        cur,
+        """
+        INSERT INTO issue_comments (id, issue_id, author_id, body)
+        VALUES %s
+        ON CONFLICT DO NOTHING
+        """,
+        issue_comment_rows,
+        batch_size,
+    )
+
+    pr_comment_rows = []
+    for i, pull_request_id in enumerate(pull_request_ids[: max(len(repo_ids) * 2, 1)]):
+        pr_comment_rows.append(
+            (
+                str(uuid.uuid4()),
+                pull_request_id,
+                user_ids[i % len(user_ids)],
+                f"Pull request review comment {i}.",
+                FILE_PATHS[i % len(FILE_PATHS)],
+                (i % 80) + 1,
+            )
+        )
+
+    batched_insert(
+        cur,
+        """
+        INSERT INTO pull_request_comments (id, pull_request_id, author_id, body, file_path, line_number)
+        VALUES %s
+        ON CONFLICT DO NOTHING
+        """,
+        pr_comment_rows,
+        batch_size,
+    )
+
+    ci_rows = []
+    for i, commit_hash in enumerate(all_commits[: max(len(repo_ids) * 3, 1)]):
+        ci_rows.append(
+            (
+                str(uuid.uuid4()),
+                repo_ids[i % len(repo_ids)],
+                commit_hash,
+                pull_request_ids[i % len(pull_request_ids)] if pull_request_ids else None,
+                CI_STATUSES[i % len(CI_STATUSES)],
+                datetime.now() - timedelta(minutes=i * 10),
+                datetime.now() - timedelta(minutes=i * 10) + timedelta(minutes=5) if CI_STATUSES[i % len(CI_STATUSES)] in {"success", "failed"} else None,
+                '{"runner":"gitmini-demo"}',
+            )
+        )
+
+    batched_insert(
+        cur,
+        """
+        INSERT INTO ci_runs (id, repo_id, commit_hash, pull_request_id, status, started_at, finished_at, metadata)
+        VALUES %s
+        ON CONFLICT DO NOTHING
+        """,
+        ci_rows,
+        batch_size,
+    )
+
+    backup_rows = [
+        (str(uuid.uuid4()), "full", "success", "backups/gitmini_demo_full.dump", datetime.now() - timedelta(days=1), datetime.now() - timedelta(days=1, minutes=-8), '{"tool":"pg_dump"}'),
+        (str(uuid.uuid4()), "restore_test", "success", "backups/gitmini_restore_test.dump", datetime.now() - timedelta(hours=2), datetime.now() - timedelta(hours=1, minutes=50), '{"tool":"pg_restore"}'),
+    ]
+    batched_insert(
+        cur,
+        """
+        INSERT INTO backup_jobs (id, job_type, status, backup_path, started_at, finished_at, metadata)
+        VALUES %s
+        ON CONFLICT DO NOTHING
+        """,
+        backup_rows,
+        batch_size,
+    )
 
 
 def seed_data(profile_name):
@@ -419,10 +639,13 @@ def seed_data(profile_name):
         seed_branches(cur, repo_ids, commits_by_repo, config["batch_size"])
 
         print("Đang tạo issues...")
-        seed_issues(cur, config["issues"], repo_ids, user_ids, config["batch_size"])
+        issue_ids = seed_issues(cur, config["issues"], repo_ids, user_ids, config["batch_size"])
 
         print("Đang tạo pull requests...")
-        seed_pull_requests(cur, config["pull_requests"], repo_ids, user_ids, commits_by_repo, config["batch_size"])
+        pull_request_ids = seed_pull_requests(cur, config["pull_requests"], repo_ids, user_ids, commits_by_repo, config["batch_size"])
+
+        print("Đang tạo dữ liệu mở rộng cho schema 20 bảng...")
+        seed_extended_tables(cur, repo_ids, user_ids, commits_by_repo, issue_ids, pull_request_ids, config["batch_size"])
 
         conn.commit()
     except Exception:

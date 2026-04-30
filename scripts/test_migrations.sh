@@ -11,10 +11,12 @@ MIGRATIONS=(
   sql/04_security_roles.sql
   sql/05_security_rls.sql
   sql/08_phase4_pr_governance.sql
+  sql/09_extend_to_20_tables.sql
   sql/03_triggers.sql
   sql/04_security_roles.sql
   sql/05_security_rls.sql
   sql/08_phase4_pr_governance.sql
+  sql/09_extend_to_20_tables.sql
 )
 
 cleanup() {
@@ -47,7 +49,16 @@ for migration in "${MIGRATIONS[@]}"; do
   docker exec -i "${CONTAINER_NAME}" psql -v ON_ERROR_STOP=1 -U gitmini_user -d gitmini_test < "${migration}" >/dev/null
 done
 
-docker exec "${CONTAINER_NAME}" psql -v ON_ERROR_STOP=1 -U gitmini_user -d gitmini_test -tAc \
-  "SELECT to_regclass('public.pull_request_reviews'), to_regclass('public.audit_logs');" | grep -Fxq "pull_request_reviews|audit_logs"
+docker exec "${CONTAINER_NAME}" psql -v ON_ERROR_STOP=1 -U gitmini_user -d gitmini_test -tAc "
+SELECT COUNT(*) = 20
+FROM pg_tables
+WHERE schemaname = 'public'
+  AND tablename IN (
+    'users', 'repositories', 'repo_members', 'commits', 'commit_parents',
+    'branches', 'issues', 'pull_requests', 'pull_request_reviews', 'audit_logs',
+    'repo_stats', 'file_blobs', 'commit_files', 'repository_languages', 'tags',
+    'releases', 'issue_comments', 'pull_request_comments', 'ci_runs', 'backup_jobs'
+  );
+" | grep -Fxq "t"
 
 echo "Migration smoke test passed on temporary PostgreSQL container ${CONTAINER_NAME}."

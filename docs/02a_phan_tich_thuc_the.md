@@ -8,7 +8,7 @@ GitMini — Hệ thống Quản lý và Lưu trữ Mã nguồn Tập trung
 
 2. Tài liệu Thiết kế Cơ sở Dữ liệu
 2a. Phân tích thực thể
-Hệ thống GitMini được xây dựng trên nền tảng 8 thực thể chính, trong đó 7 thực thể phản ánh các đối tượng nghiệp vụ thực tế (users, repositories, commits, commit_parents, branches, issues, pull_requests) và 1 thực thể kỹ thuật (repo_stats) được tạo ra nhằm mục đích tối ưu hiệu năng truy vấn thông qua kỹ thuật phi chuẩn hóa có kiểm soát. Điểm đặc trưng nổi bật nhất của thiết kế này là việc sử dụng cấu trúc Đồ thị có hướng không chu trình (DAG — Directed Acyclic Graph) để biểu diễn lịch sử commit, thay vì cấu trúc danh sách liên kết đơn tuyến tính thông thường. Cấu trúc DAG được hiện thực hóa thông qua bảng commit_parents độc lập, cho phép mỗi commit có thể có nhiều commit cha — điều này là bắt buộc để hỗ trợ merge commit trong quy trình làm việc nhiều nhánh. Ngoài ra, thiết kế cũng áp dụng nguyên tắc phi chuẩn hóa có chủ ý tại bảng repo_stats để đảm bảo hiệu năng cao cho các truy vấn đọc trên dashboard, chấp nhận sự đánh đổi với chi phí cập nhật bổ sung tại các thao tác ghi.
+Hệ thống GitMini được xây dựng trên nền tảng 20 bảng dữ liệu chính, bao gồm nhóm người dùng/repository, membership, commit graph, file change, issue/PR workflow, review, release, CI, audit, backup và thống kê. Các bảng lõi phản ánh nghiệp vụ quản lý mã nguồn, còn các bảng kỹ thuật như `repo_stats`, `audit_logs`, `ci_runs`, `backup_jobs` phục vụ quản trị CSDL, truy vết, vận hành và tối ưu hiệu năng. Điểm đặc trưng nổi bật nhất của thiết kế này là việc sử dụng cấu trúc Đồ thị có hướng không chu trình (DAG — Directed Acyclic Graph) để biểu diễn lịch sử commit, thay vì cấu trúc danh sách liên kết đơn tuyến tính thông thường. Cấu trúc DAG được hiện thực hóa thông qua bảng commit_parents độc lập, cho phép mỗi commit có thể có nhiều commit cha — điều này là bắt buộc để hỗ trợ merge commit trong quy trình làm việc nhiều nhánh. Ngoài ra, thiết kế cũng áp dụng nguyên tắc phi chuẩn hóa có chủ ý tại bảng repo_stats để đảm bảo hiệu năng cao cho các truy vấn đọc trên dashboard, chấp nhận sự đánh đổi với chi phí cập nhật bổ sung tại các thao tác ghi.
 
 
 
@@ -148,6 +148,13 @@ Quan hệ với các thực thể khác:
 * 1 repositories CHỨA N issues (quan hệ 1:N)
 * 1 repositories CHỨA N pull_requests (quan hệ 1:N)
 * 1 repositories CÓ 1 repo_stats (quan hệ 1:1 — bảng thống kê)
+* 1 repositories CÓ N repository_languages (quan hệ 1:N — thống kê ngôn ngữ)
+* 1 repositories CÓ N tags và N releases (quan hệ 1:N — phát hành phiên bản)
+* 1 commits CÓ N commit_files (quan hệ 1:N — file thay đổi trong commit)
+* 1 file_blobs CÓ THỂ ĐƯỢC THAM CHIẾU BỞI N commit_files (quan hệ 1:N — tái sử dụng blob)
+* 1 issues CÓ N issue_comments (quan hệ 1:N — bình luận issue)
+* 1 pull_requests CÓ N pull_request_comments và N ci_runs (quan hệ 1:N — review comment và CI)
+* backup_jobs là bảng vận hành độc lập ghi nhận lịch sử backup/restore test
 
 
 

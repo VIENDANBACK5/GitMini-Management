@@ -1,6 +1,6 @@
 # GitMini — Hệ thống quản lý và lưu trữ mã nguồn tập trung
 
-GitMini là bài tập lớn môn Quản trị Cơ sở dữ liệu nâng cao, mô phỏng hệ thống quản lý mã nguồn trên nền PostgreSQL. Dự án tập trung vào thiết kế CSDL SQL, commit graph dạng DAG, tối ưu truy vấn, bảo mật, sao lưu/phục hồi và ứng dụng minh họa.
+GitMini là bài tập lớn môn Quản trị Cơ sở dữ liệu nâng cao, mô phỏng hệ thống quản lý mã nguồn trên nền PostgreSQL. Dự án tập trung vào thiết kế CSDL SQL 20 bảng, commit graph dạng DAG, tối ưu truy vấn, bảo mật, sao lưu/phục hồi và ứng dụng minh họa.
 
 ## 1. Cấu trúc tài liệu nộp bài
 
@@ -37,6 +37,8 @@ sql/
   03_triggers.sql
   04_security_roles.sql
   05_security_rls.sql
+  08_phase4_pr_governance.sql
+  09_extend_to_20_tables.sql
 
 scripts/
   seed_data.py

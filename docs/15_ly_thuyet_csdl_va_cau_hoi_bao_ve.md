@@ -17,7 +17,8 @@ GitMini mô phỏng một hệ thống quản lý mã nguồn tập trung giốn
 - pull request;
 - review/approval;
 - audit log;
-- thống kê dashboard.
+- thống kê dashboard;
+- file/blob, tag/release, comment, CI run và backup job để mở rộng schema lên 20 bảng.
 
 CSDL dùng PostgreSQL 15. Các file SQL chính:
 
@@ -31,10 +32,13 @@ CSDL dùng PostgreSQL 15. Các file SQL chính:
 | `sql/06_benchmark_queries.sql` | Các truy vấn benchmark bằng `EXPLAIN ANALYZE` |
 | `sql/07_analytics_queries.sql` | Truy vấn phân tích dữ liệu quản trị |
 | `sql/08_phase4_pr_governance.sql` | Bổ sung bảng review pull request |
+| `sql/09_extend_to_20_tables.sql` | Bổ sung 9 bảng mở rộng để schema có đủ 20 bảng |
 
 ---
 
 ## 2. Các bảng chính và ý nghĩa
+
+GitMini hiện có 20 bảng CSDL chính.
 
 | Bảng | Ý nghĩa | Điểm CSDL cần nhớ |
 |---|---|---|
@@ -49,6 +53,15 @@ CSDL dùng PostgreSQL 15. Các file SQL chính:
 | `pull_request_reviews` | Approval cho pull request | Dùng để kiểm soát merge vào protected branch |
 | `audit_logs` | Nhật ký hành động nhạy cảm | Phục vụ accountability và truy vết |
 | `repo_stats` | Thống kê phi chuẩn hóa | Tăng tốc dashboard, được cập nhật bằng trigger |
+| `file_blobs` | Nội dung/metadata file blob | Có hash duy nhất và size check |
+| `commit_files` | File thay đổi trong commit | Khóa ghép `(commit_hash, file_path)` |
+| `repository_languages` | Tỷ lệ ngôn ngữ trong repo | Khóa ghép `(repo_id, language)` |
+| `tags` | Tag/version của repo | Unique theo `(repo_id, name)` |
+| `releases` | Bản phát hành gắn với tag | Liên kết repo, tag và người publish |
+| `issue_comments` | Bình luận issue | Liên kết issue và tác giả |
+| `pull_request_comments` | Bình luận/review comment trong PR | Có thể gắn `file_path`, `line_number` |
+| `ci_runs` | Lịch sử chạy CI | Theo repo, commit, PR và status |
+| `backup_jobs` | Lịch sử backup/restore test | Phục vụ vận hành và minh chứng quản trị CSDL |
 
 ---
 
@@ -438,8 +451,9 @@ GitMini có quy trình:
 3. Chạy `sql/03_triggers.sql`.
 4. Chạy `sql/04_security_roles.sql`.
 5. Chạy `sql/05_security_rls.sql`.
-6. Chạy migration bổ sung nếu có.
-7. Seed dữ liệu demo/benchmark.
+6. Chạy `sql/08_phase4_pr_governance.sql`.
+7. Chạy `sql/09_extend_to_20_tables.sql` để đủ 20 bảng.
+8. Seed dữ liệu demo/benchmark.
 
 Lệnh kiểm tra:
 
@@ -524,7 +538,7 @@ Thành viên 1 cần giải thích được:
 
 Trả lời:
 
-> Các thực thể chính gồm users, repositories, repo_members, commits, commit_parents, branches, issues, pull_requests, pull_request_reviews, audit_logs và repo_stats. Trong đó users/repositories/commits/issues/PR là nghiệp vụ chính; repo_members biểu diễn quan hệ thành viên; audit_logs phục vụ truy vết; repo_stats phục vụ dashboard.
+> Các thực thể chính gồm 20 bảng: users, repositories, repo_members, commits, commit_parents, branches, issues, pull_requests, pull_request_reviews, audit_logs, repo_stats, file_blobs, commit_files, repository_languages, tags, releases, issue_comments, pull_request_comments, ci_runs và backup_jobs. Trong đó users/repositories/commits/issues/PR là nghiệp vụ chính; các bảng mở rộng phục vụ file change, release, comment, CI và vận hành backup.
 
 #### Câu 2: Vì sao cần bảng `repo_members`?
 
@@ -741,7 +755,8 @@ Trả lời:
 
 | Câu hỏi | Ý trả lời ngắn |
 |---|---|
-| CSDL có bao nhiêu nhóm bảng chính? | User/repo/membership, commit graph, issue/PR workflow, security/audit, statistics |
+| CSDL có bao nhiêu bảng chính? | 20 bảng chính |
+| CSDL có bao nhiêu nhóm bảng chính? | User/repo/membership, commit graph/file change, issue/PR workflow, release/CI, security/audit/backup, statistics |
 | Bảng nào biểu diễn quan hệ nhiều-nhiều user-repo? | `repo_members` |
 | Vì sao dùng `commit_parents`? | Để biểu diễn commit graph/DAG và merge commit có nhiều parent |
 | Vì sao dùng `repo_stats`? | Tối ưu dashboard bằng phi chuẩn hóa có trigger kiểm soát |

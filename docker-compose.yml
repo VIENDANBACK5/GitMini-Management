@@ -17,6 +17,8 @@ services:
       - ./sql/03_triggers.sql:/docker-entrypoint-initdb.d/03_triggers.sql
       - ./sql/04_security_roles.sql:/docker-entrypoint-initdb.d/04_security_roles.sql
       - ./sql/05_security_rls.sql:/docker-entrypoint-initdb.d/05_security_rls.sql
+      - ./sql/08_phase4_pr_governance.sql:/docker-entrypoint-initdb.d/08_phase4_pr_governance.sql
+      - ./sql/09_extend_to_20_tables.sql:/docker-entrypoint-initdb.d/09_extend_to_20_tables.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U gitmini_user -d gitmini_db"]
       interval: 10s

@@ -14,6 +14,7 @@ MIGRATIONS=(
   sql/04_security_roles.sql
   sql/05_security_rls.sql
   sql/08_phase4_pr_governance.sql
+  sql/09_extend_to_20_tables.sql
 )
 
 cleanup() {
@@ -71,8 +72,14 @@ SELECT
   (SELECT COUNT(*) >= 5 FROM users) AND
   (SELECT COUNT(*) >= 2 FROM repositories) AND
   (SELECT COUNT(*) >= 1 FROM repo_members) AND
-  (SELECT to_regclass('public.pull_request_reviews') IS NOT NULL) AND
-  (SELECT to_regclass('public.audit_logs') IS NOT NULL);
+  (SELECT COUNT(*) = 20 FROM pg_tables WHERE schemaname = 'public' AND tablename IN (
+    'users', 'repositories', 'repo_members', 'commits', 'commit_parents',
+    'branches', 'issues', 'pull_requests', 'pull_request_reviews', 'audit_logs',
+    'repo_stats', 'file_blobs', 'commit_files', 'repository_languages', 'tags',
+    'releases', 'issue_comments', 'pull_request_comments', 'ci_runs', 'backup_jobs'
+  )) AND
+  (SELECT COUNT(*) >= 1 FROM commit_files) AND
+  (SELECT COUNT(*) >= 1 FROM backup_jobs);
 " | grep -Fxq "t"
 
 echo "Backup/restore test passed using temporary PostgreSQL containers."

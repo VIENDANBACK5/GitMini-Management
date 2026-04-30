@@ -13,7 +13,7 @@ Lược đồ logic (Logical Schema) là kết quả của bước chuyển hóa
 Trong phần này, lược đồ logic của GitMini được trình bày với các quy ước ký hiệu thống nhất: thuộc tính khóa chính được gạch dưới (__pk__), thuộc tính khóa ngoại được in nghiêng (*fk*), ký hiệu → biểu diễn phụ thuộc hàm (functional dependency), và ký hiệu {A, B} → C biểu diễn tập thuộc tính xác định.
 
 
-A.2. Lược đồ Logic — 8 Quan hệ
+A.2. Lược đồ Logic — 20 Quan hệ
 (1) USERS
 users(id, username, email, password_hash, full_name, bio,       avatar_url, is_active, created_at, updated_at)
 Khóa chính: id   |   Khóa dự tuyển: username, email
@@ -48,6 +48,42 @@ FK: merge_commit_hash → commits(commit_hash)  ON DELETE SET NULL
 (8) REPO_STATS
 repo_stats(repo_id, commit_count, branch_count, issue_open_count,           issue_closed_count, pr_open_count, pr_merged_count,           latest_commit_hash, latest_commit_time, latest_commit_msg, updated_at)
 FK: repo_id → repositories(id)  ON DELETE CASCADE   [Bảng phi chuẩn hóa]
+(9) REPO_MEMBERS
+repo_members(repo_id, user_id, role, joined_at)
+PK: (repo_id, user_id); FK repo_id → repositories(id); FK user_id → users(id)
+(10) PULL_REQUEST_REVIEWS
+pull_request_reviews(id, pull_request_id, reviewer_id, status, created_at)
+FK: pull_request_id → pull_requests(id); FK reviewer_id → users(id); UNIQUE(pull_request_id, reviewer_id)
+(11) AUDIT_LOGS
+audit_logs(id, actor_id, repo_id, action, target_type, target_id, metadata, created_at)
+FK: actor_id → users(id); FK repo_id → repositories(id)
+(12) FILE_BLOBS
+file_blobs(id, blob_hash, content, size_bytes, mime_type, created_at)
+UQ: blob_hash; CK: size_bytes >= 0
+(13) COMMIT_FILES
+commit_files(commit_hash, file_path, blob_id, change_type, additions, deletions)
+PK: (commit_hash, file_path); FK commit_hash → commits(commit_hash); FK blob_id → file_blobs(id)
+(14) REPOSITORY_LANGUAGES
+repository_languages(repo_id, language, bytes_count, percentage)
+PK: (repo_id, language); FK repo_id → repositories(id); CK percentage 0..100
+(15) TAGS
+tags(id, repo_id, name, target_commit_hash, created_by, created_at)
+FK: repo_id → repositories(id); FK target_commit_hash → commits(commit_hash); UNIQUE(repo_id, name)
+(16) RELEASES
+releases(id, repo_id, tag_id, title, description, is_prerelease, published_by, published_at)
+FK: repo_id → repositories(id); FK tag_id → tags(id); FK published_by → users(id)
+(17) ISSUE_COMMENTS
+issue_comments(id, issue_id, author_id, body, created_at, updated_at)
+FK: issue_id → issues(id); FK author_id → users(id)
+(18) PULL_REQUEST_COMMENTS
+pull_request_comments(id, pull_request_id, author_id, body, file_path, line_number, created_at, updated_at)
+FK: pull_request_id → pull_requests(id); FK author_id → users(id); CK line_number > 0 nếu có
+(19) CI_RUNS
+ci_runs(id, repo_id, commit_hash, pull_request_id, status, started_at, finished_at, metadata)
+FK: repo_id → repositories(id); FK commit_hash → commits(commit_hash); FK pull_request_id → pull_requests(id)
+(20) BACKUP_JOBS
+backup_jobs(id, job_type, status, backup_path, started_at, finished_at, metadata)
+CK: job_type IN full/restore_test; status IN running/success/failed
 
 
 A.3. Sơ đồ Quan hệ giữa các Bảng

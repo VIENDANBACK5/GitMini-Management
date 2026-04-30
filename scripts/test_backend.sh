@@ -11,6 +11,7 @@ MIGRATIONS=(
   sql/04_security_roles.sql
   sql/05_security_rls.sql
   sql/08_phase4_pr_governance.sql
+  sql/09_extend_to_20_tables.sql
 )
 
 cleanup() {

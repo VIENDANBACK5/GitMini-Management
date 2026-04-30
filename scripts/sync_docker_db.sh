@@ -11,6 +11,7 @@ MIGRATIONS=(
   sql/04_security_roles.sql
   sql/05_security_rls.sql
   sql/08_phase4_pr_governance.sql
+  sql/09_extend_to_20_tables.sql
 )
 
 if ! docker ps --format '{{.Names}}' | grep -Fxq "${CONTAINER_NAME}"; then
@@ -39,9 +40,12 @@ FROM repositories
 ON CONFLICT (repo_id, name) DO UPDATE SET is_protected = TRUE;
 
 SELECT
-  (SELECT to_regclass('public.repo_members') IS NOT NULL) AND
-  (SELECT to_regclass('public.pull_request_reviews') IS NOT NULL) AND
-  (SELECT to_regclass('public.audit_logs') IS NOT NULL) AND
+  (SELECT COUNT(*) = 20 FROM pg_tables WHERE schemaname = 'public' AND tablename IN (
+    'users', 'repositories', 'repo_members', 'commits', 'commit_parents',
+    'branches', 'issues', 'pull_requests', 'pull_request_reviews', 'audit_logs',
+    'repo_stats', 'file_blobs', 'commit_files', 'repository_languages', 'tags',
+    'releases', 'issue_comments', 'pull_request_comments', 'ci_runs', 'backup_jobs'
+  )) AND
   (SELECT COUNT(*) = 5 FROM pg_trigger WHERE tgname IN (
     'trg_init_stats_on_repo_create',
     'trg_commit_changes',
