@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS ci_runs (
 
 CREATE TABLE IF NOT EXISTS backup_jobs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    job_type VARCHAR(20) NOT NULL CHECK (job_type IN ('full', 'restore_test')),
+    job_type VARCHAR(20) NOT NULL CHECK (job_type IN ('full', 'incremental', 'restore_test')),
     status VARCHAR(20) NOT NULL CHECK (status IN ('running', 'success', 'failed')),
     backup_path TEXT,
     started_at TIMESTAMPTZ DEFAULT NOW(),

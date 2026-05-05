@@ -112,3 +112,59 @@ WHERE repo_id = '<repo_id_can_test>'
   AND status = 'open'
 ORDER BY created_at DESC
 LIMIT 20;
+
+/* ================================================================
+   SECTION B — Tự chứa (tự lấy repo_id/commit_hash từ DB)
+   Dùng để chụp kết quả EXPLAIN ANALYZE đưa vào báo cáo.
+   Chạy sau khi đã seed dữ liệu, không cần thay placeholder.
+   ================================================================ */
+
+-- Mục đích: Minh chứng Composite Index (repo_id, created_at DESC) trên commits
+-- Index sử dụng: idx_commits_repo_time
+-- Kết quả mong đợi: Index Scan trên idx_commits_repo_time, cost thấp, rows=10
+EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
+SELECT commit_hash, message, created_at
+FROM commits
+WHERE repo_id = (SELECT id FROM repositories ORDER BY created_at DESC LIMIT 1)
+ORDER BY created_at DESC
+LIMIT 10;
+
+-- Mục đích: Minh chứng GIN Index trên generated column search_vector cho full-text search
+-- Index sử dụng: idx_issues_search (GIN trên search_vector)
+-- Kết quả mong đợi: Bitmap Index Scan trên idx_issues_search, không có Seq Scan
+EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
+SELECT id, title
+FROM issues
+WHERE search_vector @@ to_tsquery('english', 'login | error')
+LIMIT 10;
+
+-- Mục đích: Minh chứng Recursive CTE duyệt DAG lịch sử commit từ HEAD
+-- Index sử dụng: idx_parents_commit trên commit_parents(commit_hash)
+-- Kết quả mong đợi: CTE Scan với WorkTable Scan, depth tối đa 100
+EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
+WITH RECURSIVE commit_history AS (
+    SELECT commit_hash, parent_hash, 1 AS depth
+    FROM commit_parents
+    WHERE commit_hash = (
+        SELECT head_commit_hash
+        FROM branches
+        WHERE name = 'main'
+          AND head_commit_hash IS NOT NULL
+        LIMIT 1
+    )
+    UNION ALL
+    SELECT cp.commit_hash, cp.parent_hash, ch.depth + 1
+    FROM commit_parents cp
+    JOIN commit_history ch ON cp.commit_hash = ch.parent_hash
+    WHERE ch.depth < 100
+)
+SELECT * FROM commit_history LIMIT 50;
+
+-- Mục đích: Minh chứng hiệu quả bảng phi chuẩn hóa repo_stats so với tính trực tiếp
+-- Index sử dụng: PK lookup trên repo_stats(repo_id) — Index Scan tức thì
+-- Kết quả mong đợi: Index Scan cost ~0.15..8, so sánh với Query 5 (nhiều Seq Scan)
+EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
+SELECT commit_count, issue_open_count, pr_open_count,
+       latest_commit_hash, latest_commit_time
+FROM repo_stats
+WHERE repo_id = (SELECT id FROM repositories ORDER BY created_at DESC LIMIT 1);

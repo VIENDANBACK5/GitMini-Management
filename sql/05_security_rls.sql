@@ -52,42 +52,79 @@ CREATE POLICY repo_member_access_policy ON repo_members
     );
 
 -- 4. Chính sách cho bảng COMMITS
+-- Chỉ cho phép đọc commit thuộc repo mà user có quyền truy cập (public, owner, hoặc member)
 DROP POLICY IF EXISTS commit_access_policy ON commits;
 CREATE POLICY commit_access_policy ON commits
     FOR SELECT
     USING (
-        EXISTS (
+        current_setting('app.current_username', true) = 'admin'
+        OR EXISTS (
             SELECT 1
             FROM repositories r
             WHERE r.id = commits.repo_id
+              AND (
+                r.is_private = FALSE
+                OR r.owner_id::text = current_setting('app.current_user_id', true)
+                OR EXISTS (
+                    SELECT 1 FROM repo_members rm
+                    WHERE rm.repo_id = r.id
+                      AND rm.user_id::text = current_setting('app.current_user_id', true)
+                )
+              )
         )
     );
 
 -- 5. Chính sách cho bảng ISSUES
+-- Chỉ cho phép đọc issue thuộc repo mà user có quyền truy cập
 DROP POLICY IF EXISTS issue_access_policy ON issues;
 CREATE POLICY issue_access_policy ON issues
     FOR SELECT
     USING (
-        EXISTS (
+        current_setting('app.current_username', true) = 'admin'
+        OR EXISTS (
             SELECT 1
             FROM repositories r
             WHERE r.id = issues.repo_id
+              AND (
+                r.is_private = FALSE
+                OR r.owner_id::text = current_setting('app.current_user_id', true)
+                OR EXISTS (
+                    SELECT 1 FROM repo_members rm
+                    WHERE rm.repo_id = r.id
+                      AND rm.user_id::text = current_setting('app.current_user_id', true)
+                )
+              )
         )
     );
 
 -- 6. Chính sách cho bảng PULL_REQUESTS
+-- Chỉ cho phép đọc PR thuộc repo mà user có quyền truy cập
 DROP POLICY IF EXISTS pull_request_access_policy ON pull_requests;
 CREATE POLICY pull_request_access_policy ON pull_requests
     FOR SELECT
     USING (
-        EXISTS (
+        current_setting('app.current_username', true) = 'admin'
+        OR EXISTS (
             SELECT 1
             FROM repositories r
             WHERE r.id = pull_requests.repo_id
+              AND (
+                r.is_private = FALSE
+                OR r.owner_id::text = current_setting('app.current_user_id', true)
+                OR EXISTS (
+                    SELECT 1 FROM repo_members rm
+                    WHERE rm.repo_id = r.id
+                      AND rm.user_id::text = current_setting('app.current_user_id', true)
+                )
+              )
         )
     );
 
+-- Áp dụng FORCE RLS để ngăn table owner bypass policy
 ALTER TABLE repositories FORCE ROW LEVEL SECURITY;
+ALTER TABLE commits FORCE ROW LEVEL SECURITY;
+ALTER TABLE issues FORCE ROW LEVEL SECURITY;
+ALTER TABLE pull_requests FORCE ROW LEVEL SECURITY;
 
 /*
   HƯỚNG DẪN SỬ DỤNG TRONG ỨNG DỤNG (FASTAPI):

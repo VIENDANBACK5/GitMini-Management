@@ -611,6 +611,142 @@ def seed_extended_tables(cur, repo_ids, user_ids, commits_by_repo, issue_ids, pu
     )
 
 
+def seed_audit_logs(cur, user_ids, repo_ids, batch_size):
+    rows = []
+
+    # 'create_repo': 1 log cho mỗi repo
+    for i, repo_id in enumerate(repo_ids):
+        rows.append((
+            str(uuid.uuid4()),
+            user_ids[i % len(user_ids)],
+            repo_id,
+            "create_repo",
+            "repository",
+            repo_id,
+            '{"note": "seeded", "action": "create_repo"}',
+        ))
+
+    # 'push_commit': 1 log cho mỗi 5 commit
+    cur.execute("SELECT commit_hash, repo_id, author_id FROM commits ORDER BY created_at")
+    for i, (commit_hash, repo_id, author_id) in enumerate(cur.fetchall()):
+        if i % 5 == 0:
+            rows.append((
+                str(uuid.uuid4()),
+                str(author_id) if author_id else user_ids[i % len(user_ids)],
+                str(repo_id),
+                "push_commit",
+                "commit",
+                commit_hash,
+                '{"note": "seeded", "action": "push_commit"}',
+            ))
+
+    # 'close_issue': 1 log cho mỗi issue có status='closed'
+    cur.execute("SELECT id, repo_id, author_id FROM issues WHERE status = 'closed'")
+    for issue_id, repo_id, author_id in cur.fetchall():
+        rows.append((
+            str(uuid.uuid4()),
+            str(author_id) if author_id else user_ids[0],
+            str(repo_id),
+            "close_issue",
+            "issue",
+            str(issue_id),
+            '{"note": "seeded", "action": "close_issue"}',
+        ))
+
+    # 'merge_pr': 1 log cho mỗi PR có status='merged'
+    cur.execute("SELECT id, repo_id, author_id FROM pull_requests WHERE status = 'merged'")
+    for pr_id, repo_id, author_id in cur.fetchall():
+        rows.append((
+            str(uuid.uuid4()),
+            str(author_id) if author_id else user_ids[0],
+            str(repo_id),
+            "merge_pr",
+            "pull_request",
+            str(pr_id),
+            '{"note": "seeded", "action": "merge_pr"}',
+        ))
+
+    batched_insert(
+        cur,
+        """
+        INSERT INTO audit_logs (id, actor_id, repo_id, action, target_type, target_id, metadata)
+        VALUES %s
+        """,
+        rows,
+        500,
+    )
+    print(f"Đã tạo {len(rows):,} audit_logs bản ghi.")
+
+
+def seed_pr_reviews(cur, user_ids, batch_size):
+    rows = []
+
+    cur.execute("SELECT id, author_id, status FROM pull_requests")
+    all_prs = cur.fetchall()
+
+    merged_prs = [(str(pr_id), str(author_id) if author_id else None)
+                  for pr_id, author_id, status in all_prs if status == "merged"]
+    open_prs = [(str(pr_id), str(author_id) if author_id else None)
+                for pr_id, author_id, status in all_prs if status == "open"]
+
+    def pick_reviewer(author_id):
+        candidates = [uid for uid in user_ids if uid != author_id]
+        return random.choice(candidates) if candidates else None
+
+    # Mỗi merged PR: 1 approved review
+    for pr_id, author_id in merged_prs:
+        reviewer_id = pick_reviewer(author_id)
+        if reviewer_id:
+            rows.append((str(uuid.uuid4()), pr_id, reviewer_id, "approved"))
+
+    # 20% open PR: changes_requested hoặc commented
+    sample_open = random.sample(open_prs, max(1, len(open_prs) // 5))
+    for pr_id, author_id in sample_open:
+        reviewer_id = pick_reviewer(author_id)
+        if reviewer_id:
+            status = random.choice(["changes_requested", "commented"])
+            rows.append((str(uuid.uuid4()), pr_id, reviewer_id, status))
+
+    batched_insert(
+        cur,
+        """
+        INSERT INTO pull_request_reviews (id, pull_request_id, reviewer_id, status)
+        VALUES %s
+        ON CONFLICT (pull_request_id, reviewer_id) DO NOTHING
+        """,
+        rows,
+        500,
+    )
+    print(f"Đã tạo {len(rows):,} pull_request_reviews bản ghi.")
+
+
+def seed_merge_commits(cur, commits_by_repo, batch_size):
+    rows = []
+
+    for repo_id, commit_hashes in commits_by_repo.items():
+        if len(commit_hashes) < 10:
+            continue
+
+        mid = len(commit_hashes) // 2
+        rows.append((commit_hashes[mid], commit_hashes[mid - 3], 1))
+
+        if len(commit_hashes) >= 20:
+            mid2 = len(commit_hashes) * 3 // 4
+            rows.append((commit_hashes[mid2], commit_hashes[mid2 - 3], 1))
+
+    batched_insert(
+        cur,
+        """
+        INSERT INTO commit_parents (commit_hash, parent_hash, ordinal)
+        VALUES %s
+        ON CONFLICT DO NOTHING
+        """,
+        rows,
+        batch_size,
+    )
+    print(f"Đã tạo {len(rows):,} merge commit relationships (ordinal=1).")
+
+
 def seed_data(profile_name):
     config = PROFILES[profile_name]
     started_at = time.time()
@@ -643,6 +779,15 @@ def seed_data(profile_name):
 
         print("Đang tạo pull requests...")
         pull_request_ids = seed_pull_requests(cur, config["pull_requests"], repo_ids, user_ids, commits_by_repo, config["batch_size"])
+
+        print("Đang tạo audit logs...")
+        seed_audit_logs(cur, user_ids, repo_ids, config["batch_size"])
+
+        print("Đang tạo pull request reviews...")
+        seed_pr_reviews(cur, user_ids, config["batch_size"])
+
+        print("Đang tạo merge commits (DAG ordinal=1)...")
+        seed_merge_commits(cur, commits_by_repo, config["batch_size"])
 
         print("Đang tạo dữ liệu mở rộng cho schema 20 bảng...")
         seed_extended_tables(cur, repo_ids, user_ids, commits_by_repo, issue_ids, pull_request_ids, config["batch_size"])
