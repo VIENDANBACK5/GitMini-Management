@@ -10,7 +10,7 @@ REPO_CAPABILITY_FIELDS = """
     END AS current_user_role,
     (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner', 'maintainer', 'developer', 'reviewer')) AS can_create_issue,
     (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner', 'maintainer', 'developer')) AS can_create_pull,
-    (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner', 'maintainer')) AS can_update,
+    (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner')) AS can_update,
     (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner', 'maintainer')) AS can_merge
 """
 
@@ -197,7 +197,7 @@ SELECT
         WHEN r.owner_id = %s THEN 'owner'
         ELSE current_member.role
     END AS current_user_role,
-    (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner', 'maintainer')) AS can_update
+    (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner', 'maintainer', 'developer', 'reviewer')) AS can_update
 FROM issues i
 JOIN repositories r ON r.id = i.repo_id
 LEFT JOIN repo_members current_member ON current_member.repo_id = r.id AND current_member.user_id = %s
@@ -231,7 +231,7 @@ WITH pull_rows AS (
             WHEN r.owner_id = %s THEN 'owner'
             ELSE current_member.role
         END AS current_user_role,
-        (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner', 'maintainer')) AS can_update,
+        (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner', 'maintainer', 'developer')) AS can_update,
         COALESCE(target_branch.is_protected, FALSE) AS target_branch_protected,
         COALESCE(review_stats.approval_count, 0) AS approval_count
     FROM pull_requests pr

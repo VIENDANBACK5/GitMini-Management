@@ -104,6 +104,12 @@ def require_admin(ctx: dict) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
 
+def require_admin_or_owner(repo: dict, ctx: dict) -> None:
+    if ctx["is_admin"] or repo["owner_id"] == ctx["id"]:
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin or owner access required")
+
+
 def log_audit(ctx: dict, repo_id: str | None, action: str, target_type: str, target_id: str | None, metadata: dict | None = None) -> None:
     execute_one(
         """
@@ -137,7 +143,7 @@ def require_issue_update(issue_id: str, ctx: dict) -> dict:
     if not issue:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
     role = "admin" if ctx["is_admin"] else "owner" if issue["owner_id"] == ctx["id"] else issue["member_role"]
-    if role in {"admin", "owner", "maintainer"} or issue["author_id"] == ctx["id"]:
+    if role in {"admin", "owner", "maintainer", "developer", "reviewer"} or issue["author_id"] == ctx["id"]:
         return issue
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to update this issue")
 
@@ -182,7 +188,7 @@ def require_pull_update(pull_id: str, target_status: str, ctx: dict) -> dict:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only open pull requests can be merged")
         if pull["target_branch_protected"] and pull["approval_count"] < 1:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Protected branch requires at least one reviewer approval before merge")
-    if target_status == "closed" and role not in {"admin", "owner", "maintainer"} and pull["author_id"] != ctx["id"]:
+    if target_status == "closed" and role not in {"admin", "owner", "maintainer", "developer"} and pull["author_id"] != ctx["id"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to close this pull request")
     return pull
 
@@ -444,6 +450,24 @@ def remove_repo_member(repo_name: str, username: str, current_user: CurrentUser)
     return {"status": "removed", "username": username}
 
 
+@app.delete("/repos/{repo_name}")
+def delete_repo(repo_name: str, current_user: CurrentUser):
+    ctx = current_context(current_user)
+    repo = require_repo_access(repo_name, ctx)
+    require_admin_or_owner(repo, ctx)
+    
+    execute_one("DELETE FROM repositories WHERE id = %s", (repo["id"],))
+    log_audit(
+        ctx,
+        None,
+        "repo.delete",
+        "repository",
+        repo["id"],
+        {"name": repo["name"], "repo": repo_name}
+    )
+    return {"status": "deleted", "name": repo_name}
+
+
 @app.get("/repos/{repo_name}/history")
 def get_repo_history(
     repo_name: str,
@@ -488,14 +512,17 @@ def create_issue(repo_name: str, payload: IssueCreate, current_user: CurrentUser
     ctx = current_context(current_user)
     repo = require_repo_access(repo_name, ctx)
     require_role(repo, WRITE_ISSUE_ROLES)
-    return execute_one(
-        """
-        INSERT INTO issues (repo_id, author_id, title, body, labels)
-        VALUES (%s, %s, %s, %s, %s)
-        RETURNING id, title, body, status, labels, created_at, updated_at, closed_at
-        """,
-        (repo["id"], ctx["id"], payload.title, payload.body, payload.labels),
-    )
+    try:
+        return execute_one(
+            """
+            INSERT INTO issues (repo_id, author_id, title, body, labels)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id, title, body, status, labels, created_at, updated_at, closed_at
+            """,
+            (repo["id"], ctx["id"], payload.title, payload.body, payload.labels),
+        )
+    except psycopg2.Error as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc).strip()) from exc
 
 
 @app.patch("/issues/{issue_id}")
@@ -575,14 +602,17 @@ def create_pull(repo_name: str, payload: PullRequestCreate, current_user: Curren
     ctx = current_context(current_user)
     repo = require_repo_access(repo_name, ctx)
     require_role(repo, WRITE_PULL_ROLES)
-    return execute_one(
-        """
-        INSERT INTO pull_requests (repo_id, author_id, title, body, source_branch, target_branch)
-        VALUES (%s, %s, %s, %s, %s, %s)
-        RETURNING id, title, body, status, source_branch, target_branch, created_at, updated_at
-        """,
-        (repo["id"], ctx["id"], payload.title, payload.body, payload.source_branch, payload.target_branch),
-    )
+    try:
+        return execute_one(
+            """
+            INSERT INTO pull_requests (repo_id, author_id, title, body, source_branch, target_branch)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id, title, body, status, source_branch, target_branch, created_at, updated_at
+            """,
+            (repo["id"], ctx["id"], payload.title, payload.body, payload.source_branch, payload.target_branch),
+        )
+    except psycopg2.Error as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc).strip()) from exc
 
 
 @app.post("/pulls/{pull_id}/reviews", status_code=status.HTTP_201_CREATED)

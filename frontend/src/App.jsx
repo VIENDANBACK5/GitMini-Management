@@ -145,7 +145,8 @@ export default function App() {
 
     setMemberError('');
     try {
-      setMembers(await api(`/repos/${encodeURIComponent(repo)}/members`));
+      const result = await api(`/repos/${encodeURIComponent(repo)}/members`);
+      setMembers(Array.isArray(result) ? result : []);
     } catch (err) {
       setMembers([]);
       setMemberError(err.message);
@@ -155,6 +156,8 @@ export default function App() {
   async function load(nextView = view, repo = selectedRepo) {
     setLoading(true);
     setError('');
+    setData([]); // Ensure data is reset to empty array to avoid crashes
+    setMembers([]); // Also clear members for safety
 
     try {
       const currentMe = await api('/auth/me');
@@ -257,7 +260,8 @@ export default function App() {
   async function handleSearch(value) {
     const q = value.trim();
     if (!q) {
-      load();
+      setView('repos');
+      load('repos');
       return;
     }
 
@@ -281,14 +285,41 @@ export default function App() {
   async function createRepo(values) {
     if (!values.name?.trim()) return;
 
-    await api('/repos', 'POST', {
-      name: values.name.trim(),
-      description: values.description?.trim() || '',
-      is_private: Boolean(values.isPrivate),
-    });
-    setModal(null);
-    setView('repos');
-    await load('repos', selectedRepo);
+    setLoading(true);
+    setError('');
+    try {
+      await api('/repos', 'POST', {
+        name: values.name.trim(),
+        description: values.description?.trim() || '',
+        is_private: Boolean(values.isPrivate),
+      });
+      setModal(null);
+      setView('repos');
+      await load('repos', selectedRepo);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function deleteRepo() {
+    if (!selectedRepo) return;
+    
+    setLoading(true);
+    setError('');
+    try {
+      await api(`/repos/${encodeURIComponent(selectedRepo)}`, 'DELETE');
+      setModal(null);
+      setSelectedRepo(null);
+      setView('repos');
+      await load('repos');
+    } catch (err) {
+      setError(err.message);
+      setModal(null);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function createIssue(values) {
@@ -296,19 +327,27 @@ export default function App() {
     const title = values.title?.trim();
     if (!repo || !title) return;
 
-    const labels = (values.labels || '')
-      .split(',')
-      .map((label) => label.trim())
-      .filter(Boolean);
+    setLoading(true);
+    setError('');
+    try {
+      const labels = (values.labels || '')
+        .split(',')
+        .map((label) => label.trim())
+        .filter(Boolean);
 
-    await api(`/repos/${encodeURIComponent(repo)}/issues`, 'POST', {
-      title,
-      body: values.body?.trim() || '',
-      labels,
-    });
-    setModal(null);
-    setView('issues');
-    await load('issues', selectedRepo);
+      await api(`/repos/${encodeURIComponent(repo)}/issues`, 'POST', {
+        title,
+        body: values.body?.trim() || '',
+        labels,
+      });
+      setModal(null);
+      setView('issues');
+      await load('issues', selectedRepo);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function createPull(values) {
@@ -318,15 +357,23 @@ export default function App() {
     const target = values.target?.trim();
     if (!repo || !title || !source || !target) return;
 
-    await api(`/repos/${encodeURIComponent(repo)}/pulls`, 'POST', {
-      title,
-      body: values.body?.trim() || '',
-      source_branch: source,
-      target_branch: target,
-    });
-    setModal(null);
-    setView('pulls');
-    await load('pulls', selectedRepo);
+    setLoading(true);
+    setError('');
+    try {
+      await api(`/repos/${encodeURIComponent(repo)}/pulls`, 'POST', {
+        title,
+        body: values.body?.trim() || '',
+        source_branch: source,
+        target_branch: target,
+      });
+      setModal(null);
+      setView('pulls');
+      await load('pulls', selectedRepo);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function updateIssue(issueId, status) {
@@ -374,6 +421,14 @@ export default function App() {
 
   async function removeMember(username) {
     if (!selectedRepo || !mayManageMembers) return;
+
+    const safeMembers = Array.isArray(members) ? members : [];
+    const ownerCount = safeMembers.filter((m) => m.role === 'owner').length;
+    const target = safeMembers.find((m) => m.username === username);
+    if (target?.role === 'owner' && ownerCount <= 1) {
+      setMemberError('Repository must keep at least one owner');
+      return;
+    }
 
     try {
       setMemberError('');
@@ -526,7 +581,7 @@ export default function App() {
     return (
       <div>
         <SectionHeader title="Repository Control Center" subtitle="Manage visible repositories, branches, commits and role-based access." />
-        {data.length ? (
+        {Array.isArray(data) && data.length ? (
           <Row gutter={[18, 18]}>
             {data.map((repo) => (
               <Col xs={24} md={12} xl={8} key={repo.id}>
@@ -557,10 +612,13 @@ export default function App() {
       <div>
         <SectionHeader title={`Commit History`} selectedRepo={selectedRepo}>
           {selectedRepoCapability ? <RoleTag role={selectedRepoCapability.current_user_role} /> : null}
+          {(me.system_role === 'admin' || selectedRepoRole === 'owner') && (
+            <Button danger onClick={() => setModal('delete_repo')}>Delete Repository</Button>
+          )}
           <Button icon={<ArrowLeft size={16} />} onClick={() => setView('repos')}>Back</Button>
         </SectionHeader>
         {renderMembers()}
-        {data.length ? (
+        {Array.isArray(data) && data.length ? (
           <Card className="dashboard-card">
             <Timeline
               items={data.map((item) => ({
@@ -613,7 +671,7 @@ export default function App() {
           </Button>
         </SectionHeader>
         {selectedRepoCapability && !selectedRepoCapability.can_create_issue ? <Alert type="warning" showIcon message="Your current repo role is read-only for issue creation." className="content-alert" /> : null}
-        <Table rowKey="id" columns={columns} dataSource={data} pagination={{ pageSize: 8 }} scroll={{ x: 980 }} />
+        <Table rowKey="id" columns={columns} dataSource={Array.isArray(data) ? data : []} pagination={{ pageSize: 8 }} scroll={{ x: 980 }} />
       </div>
     );
   }
@@ -652,7 +710,7 @@ export default function App() {
           </Button>
         </SectionHeader>
         {selectedRepoCapability && !selectedRepoCapability.can_create_pull ? <Alert type="warning" showIcon message="Your current repo role cannot create pull requests." className="content-alert" /> : null}
-        <Table rowKey="id" columns={columns} dataSource={data} pagination={{ pageSize: 8 }} scroll={{ x: 1120 }} />
+        <Table rowKey="id" columns={columns} dataSource={Array.isArray(data) ? data : []} pagination={{ pageSize: 8 }} scroll={{ x: 1120 }} />
       </div>
     );
   }
@@ -710,7 +768,7 @@ export default function App() {
     return (
       <div>
         <SectionHeader title="Audit Logs" subtitle="Admin-only accountability trail for sensitive operations." />
-        <Table rowKey="id" columns={columns} dataSource={data} pagination={{ pageSize: 10 }} scroll={{ x: 1100 }} />
+        <Table rowKey="id" columns={columns} dataSource={Array.isArray(data) ? data : []} pagination={{ pageSize: 10 }} scroll={{ x: 1100 }} />
       </div>
     );
   }
@@ -719,7 +777,7 @@ export default function App() {
     return (
       <div>
         <SectionHeader title={searchTitle} selectedRepo={selectedRepo} />
-        {data.length ? (
+        {Array.isArray(data) && data.length ? (
           <Row gutter={[18, 18]}>
             {data.map((result, index) => (
               <Col xs={24} md={12} xl={8} key={`${result.type}-${result.id}-${index}`}>
@@ -756,6 +814,9 @@ export default function App() {
       );
     }
 
+    const safeMembers = Array.isArray(members) ? members : [];
+    const ownerCount = safeMembers.filter((m) => m.role === 'owner').length;
+
     const memberColumns = [
       { title: 'User', render: (_, member) => <Space direction="vertical" size={0}><Text strong>{member.username}</Text><Text type="secondary">{member.full_name || 'No full name'} · joined {formatDate(member.joined_at)}</Text></Space> },
       {
@@ -764,7 +825,23 @@ export default function App() {
           <Select value={member.role} onChange={(role) => updateMember(member.username, role)} options={repoRoles.map((role) => ({ value: role, label: role }))} />
         ) : <RoleTag role={member.role} />,
       },
-      { title: 'Action', render: (_, member) => <Button danger disabled={!mayManageMembers} onClick={() => removeMember(member.username)}>Remove</Button> },
+      {
+        title: 'Action',
+        render: (_, member) => {
+          const isLastOwner = member.role === 'owner' && ownerCount <= 1;
+          return (
+            <Tooltip title={isLastOwner ? 'Repository must keep at least one owner' : ''}>
+              <Button
+                danger
+                disabled={!mayManageMembers || isLastOwner}
+                onClick={() => removeMember(member.username)}
+              >
+                Remove
+              </Button>
+            </Tooltip>
+          );
+        },
+      },
     ];
 
     return (
@@ -784,7 +861,7 @@ export default function App() {
             <Button type="primary" htmlType="submit" icon={<Plus size={16} />}>Add member</Button>
           </Form>
         ) : <Alert type="info" showIcon message="Only owner/admin can manage roles." className="content-alert" />}
-        <Table rowKey="username" columns={memberColumns} dataSource={members} pagination={false} locale={{ emptyText: 'No members found.' }} />
+        <Table rowKey="username" columns={memberColumns} dataSource={safeMembers} pagination={false} locale={{ emptyText: 'No members found.' }} />
       </Card>
     );
   }
@@ -852,6 +929,20 @@ export default function App() {
             </Form.Item>
             <Button type="primary" htmlType="submit" block>Create Pull Request</Button>
           </Form>
+        </Modal>
+
+        <Modal title="Confirm Repository Deletion" open={modal === 'delete_repo'} onCancel={() => setModal(null)} onOk={deleteRepo} okText="Delete Forever" okButtonProps={{ danger: true }} confirmLoading={loading}>
+          <Alert
+            type="error"
+            showIcon
+            message="Critical Action"
+            description={
+              <span>
+                You are about to delete <strong>{selectedRepo}</strong>. This will permanently remove all commits, issues, branches, and stats from the PostgreSQL database. This action cannot be undone.
+              </span>
+            }
+          />
+          <Paragraph style={{ marginTop: 16 }}>Are you absolutely sure you want to proceed?</Paragraph>
         </Modal>
       </>
     );
