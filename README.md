@@ -62,6 +62,6 @@ Tài liệu được tổ chức bám sát khung nội dung hướng dẫn của
     *   API Docs: `http://localhost:8000/docs`
 
 ---
-**Nhóm thực hiện:** [minhmoidz]
+**Nhóm thực hiện:** [nhóm 10]
 **Môn học:** Quản trị Cơ sở dữ liệu nâng cao
 **Đề tài:** GitMini — Hệ thống quản trị mã nguồn tập trung PostgreSQL.
