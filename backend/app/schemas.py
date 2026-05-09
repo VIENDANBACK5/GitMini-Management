@@ -49,3 +49,15 @@ class PullRequestUpdate(BaseModel):
 
 class PullRequestReviewCreate(BaseModel):
     status: Literal["approved"] = "approved"
+
+
+class FileChange(BaseModel):
+    path: str
+    content: str
+    change_type: Literal["added", "modified", "deleted"] = "added"
+
+
+class CommitCreate(BaseModel):
+    branch: str = Field(default="main")
+    message: str = Field(min_length=1)
+    files: list[FileChange] = Field(default_factory=list)

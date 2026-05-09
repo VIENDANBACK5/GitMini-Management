@@ -44,3 +44,44 @@ export function login(username, password) {
 export function logout() {
   return api('/auth/logout', 'POST');
 }
+
+export function getRepos() {
+  return api('/repos');
+}
+
+export function getRepo(name) {
+  return api(`/repos/${name}`);
+}
+
+export function createRepo(data) {
+  return api('/repos', 'POST', data);
+}
+
+export function deleteRepo(name) {
+  return api(`/repos/${name}`, 'DELETE');
+}
+
+export function getRepoHistory(name) {
+  return api(`/repos/${name}/history`);
+}
+
+export function createCommit(repoName, data) {
+  return api(`/repos/${repoName}/commits`, 'POST', data);
+}
+
+export function getIssues(params = {}) {
+  const query = new URLSearchParams(params).toString();
+  return api(`/issues${query ? '?' + query : ''}`);
+}
+
+export function createIssue(repoName, data) {
+  return api(`/repos/${repoName}/issues`, 'POST', data);
+}
+
+export function getAnalytics() {
+  return api('/analytics');
+}
+
+export function searchGlobal(q) {
+  return api(`/search?q=${encodeURIComponent(q)}`);
+}

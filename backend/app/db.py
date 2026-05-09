@@ -77,6 +77,8 @@ def fetch_one(sql: str, params: tuple = ()) -> dict | None:
     with get_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(sql, params)
+            if cur.description is None: # No results to fetch (DELETE/UPDATE without RETURNING)
+                return None
             return serialize_row(cur.fetchone())
 
 

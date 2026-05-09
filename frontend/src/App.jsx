@@ -439,6 +439,33 @@ export default function App() {
     }
   }
 
+  async function handleCreateCommit(values) {
+    if (!selectedRepo) return;
+
+    setLoading(true);
+    setError('');
+    try {
+      const payload = {
+        branch: values.branch || 'main',
+        message: values.message,
+        files: [
+          {
+            path: values.filePath,
+            content: values.fileContent,
+            change_type: 'added'
+          }
+        ]
+      };
+      await api(`/repos/${encodeURIComponent(selectedRepo)}/commits`, 'POST', payload);
+      setModal(null);
+      await load('history', selectedRepo);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function openIssueModal() {
     if (selectedRepoCapability && !selectedRepoCapability.can_create_issue) return;
     setModal('issue');
@@ -612,6 +639,9 @@ export default function App() {
       <div>
         <SectionHeader title={`Commit History`} selectedRepo={selectedRepo}>
           {selectedRepoCapability ? <RoleTag role={selectedRepoCapability.current_user_role} /> : null}
+          {['owner', 'maintainer', 'developer'].includes(selectedRepoRole) && (
+            <Button type="primary" icon={<Plus size={16} />} onClick={() => setModal('commit')}>Simulate Push</Button>
+          )}
           {(me.system_role === 'admin' || selectedRepoRole === 'owner') && (
             <Button danger onClick={() => setModal('delete_repo')}>Delete Repository</Button>
           )}
@@ -928,6 +958,25 @@ export default function App() {
               <TextArea rows={4} placeholder="Description" />
             </Form.Item>
             <Button type="primary" htmlType="submit" block>Create Pull Request</Button>
+          </Form>
+        </Modal>
+
+        <Modal title="Simulate Push (Create Commit)" open={modal === 'commit'} onCancel={() => setModal(null)} footer={null} destroyOnClose>
+          <Alert type="info" message="Database Demonstration" description="This will insert a real commit, link parents in DAG, and store physical file blobs in PostgreSQL." showIcon style={{ marginBottom: 16 }} />
+          <Form layout="vertical" onFinish={handleCreateCommit} initialValues={{ branch: 'main', filePath: 'hello.txt', fileContent: 'Hello from GitMini!' }}>
+            <Form.Item label="Target Branch" name="branch" rules={[{ required: true }]}>
+              <Input placeholder="main" />
+            </Form.Item>
+            <Form.Item label="Commit Message" name="message" rules={[{ required: true, message: 'Enter commit message' }]}>
+              <Input placeholder="Initial commit" />
+            </Form.Item>
+            <Form.Item label="File Path" name="filePath" rules={[{ required: true }]}>
+              <Input placeholder="src/main.py" />
+            </Form.Item>
+            <Form.Item label="File Content" name="fileContent" rules={[{ required: true }]}>
+              <TextArea rows={6} placeholder="Enter file content to be stored in file_blobs..." />
+            </Form.Item>
+            <Button type="primary" htmlType="submit" block loading={loading}>Push Commit</Button>
           </Form>
         </Modal>
 

@@ -1,18 +1,23 @@
+import hashlib
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
-
+# pyrefly: ignore [missing-import]
 import psycopg2
+# pyrefly: ignore [missing-import]
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
+# pyrefly: ignore [missing-import]
 from fastapi.responses import FileResponse
+# pyrefly: ignore [missing-import]
 from fastapi.staticfiles import StaticFiles
 from psycopg2 import errors
 from psycopg2.extras import Json
 
 from app import queries
 from app.auth import SESSION_COOKIE_NAME, SESSION_TTL_SECONDS, create_session, delete_session, require_user, verify_credentials
-from app.db import close_pool, execute_one, fetch_all, fetch_one, init_pool
-from app.schemas import IssueCreate, IssueUpdate, LoginRequest, PullRequestCreate, PullRequestReviewCreate, PullRequestUpdate, RepoCreate, RepoMemberCreate, RepoMemberUpdate
+from app.db import close_pool, execute_one, fetch_all, fetch_one, init_pool, get_connection
+from app.schemas import CommitCreate, IssueCreate, IssueUpdate, LoginRequest, PullRequestCreate, PullRequestReviewCreate, PullRequestUpdate, RepoCreate, RepoMemberCreate, RepoMemberUpdate
 
 FRONTEND_DIR = Path("/app/frontend")
 CurrentUser = Annotated[str, Depends(require_user)]
@@ -456,7 +461,7 @@ def delete_repo(repo_name: str, current_user: CurrentUser):
     repo = require_repo_access(repo_name, ctx)
     require_admin_or_owner(repo, ctx)
     
-    execute_one("DELETE FROM repositories WHERE id = %s", (repo["id"],))
+    execute_one("DELETE FROM repositories WHERE id = %s RETURNING id", (repo["id"],))
     log_audit(
         ctx,
         None,
@@ -483,6 +488,70 @@ def get_repo_history(
         fallback = fetch_all(queries.COMMIT_HISTORY_FALLBACK, (ctx["id"], repo_name, ctx["username"], ctx["id"], limited))
         return fallback or rows
     return rows
+
+
+@app.post("/repos/{repo_name}/commits", status_code=status.HTTP_201_CREATED)
+def create_commit(repo_name: str, payload: CommitCreate, current_user: CurrentUser):
+    ctx = current_context(current_user)
+    repo = require_repo_access(repo_name, ctx)
+    require_role(repo, WRITE_PULL_ROLES) # Developer+ role
+
+    branch = fetch_one(
+        "SELECT head_commit_hash FROM branches WHERE repo_id = %s AND name = %s",
+        (repo["id"], payload.branch)
+    )
+    if not branch:
+        raise HTTPException(status_code=404, detail=f"Branch '{payload.branch}' not found")
+
+    parent_hash = branch["head_commit_hash"]
+    
+    # Generate commit hash (simulated)
+    raw_content = f"{repo['id']}:{payload.branch}:{payload.message}:{parent_hash}:{uuid.uuid4()}"
+    new_hash = hashlib.sha1(raw_content.encode()).hexdigest()
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # 1. Create Commit
+            cur.execute(
+                "INSERT INTO commits (commit_hash, repo_id, author_id, message) VALUES (%s, %s, %s, %s)",
+                (new_hash, repo["id"], ctx["id"], payload.message)
+            )
+            
+            # 2. Link Parent (if exists)
+            if parent_hash:
+                cur.execute(
+                    "INSERT INTO commit_parents (commit_hash, parent_hash, ordinal) VALUES (%s, %s, 0)",
+                    (new_hash, parent_hash)
+                )
+            
+            # 3. Create Blobs and File Entries
+            for f in payload.files:
+                blob_hash = hashlib.sha1(f.content.encode()).hexdigest()
+                cur.execute(
+                    "INSERT INTO file_blobs (blob_hash, content, size_bytes) VALUES (%s, %s, %s) ON CONFLICT (blob_hash) DO NOTHING RETURNING id",
+                    (blob_hash, f.content, len(f.content))
+                )
+                blob_id_row = cur.fetchone()
+                if not blob_id_row:
+                     cur.execute("SELECT id FROM file_blobs WHERE blob_hash = %s", (blob_hash,))
+                     blob_id_row = cur.fetchone()
+                
+                cur.execute(
+                    "INSERT INTO commit_files (commit_hash, file_path, blob_id, change_type) VALUES (%s, %s, %s, %s)",
+                    (new_hash, f.path, blob_id_row[0], f.change_type)
+                )
+            
+            # 4. Update Branch Head
+            cur.execute(
+                "UPDATE branches SET head_commit_hash = %s, updated_at = NOW() WHERE repo_id = %s AND name = %s",
+                (new_hash, repo["id"], payload.branch)
+            )
+            
+            # 5. Audit Log (inside the same connection if we had log_audit_cur, but we'll call log_audit after)
+    
+    log_audit(ctx, repo["id"], "commit.create", "commit", new_hash, {"message": payload.message, "branch": payload.branch})
+    
+    return {"status": "ok", "commit_hash": new_hash}
 
 
 @app.get("/issues")
