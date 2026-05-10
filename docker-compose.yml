@@ -1,7 +1,7 @@
 services:
   # --- Database Service ---
   db:
-    image: postgres:12-alpine
+    image: postgres:15-alpine
     container_name: gitmini_db_container
     environment:
       POSTGRES_USER: gitmini_user

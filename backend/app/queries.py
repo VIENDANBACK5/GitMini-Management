@@ -116,7 +116,7 @@ WITH RECURSIVE repo_target AS (
             SELECT b.head_commit_hash
             FROM branches b
             JOIN repo_target rt ON rt.id = b.repo_id
-            WHERE b.name = rt.default_branch
+            WHERE b.name = COALESCE(%s, rt.default_branch)
             LIMIT 1
         ),
         (
@@ -289,15 +289,11 @@ WITH target_repo AS (
         i.status AS status,
         r.name AS repo,
         i.created_at,
-        ts_rank(
-            to_tsvector('english', i.title || ' ' || i.body),
-            plainto_tsquery('english', %s)
-        ) AS rank
+        ts_rank(i.search_vector, plainto_tsquery('english', %s)) AS rank
     FROM issues i
     JOIN target_repo tr ON tr.id = i.repo_id
     JOIN repositories r ON r.id = i.repo_id
-    WHERE to_tsvector('english', i.title || ' ' || i.body)
-          @@ plainto_tsquery('english', %s)
+    WHERE i.search_vector @@ plainto_tsquery('english', %s)
 ), commit_results AS (
     SELECT
         'commit' AS type,
@@ -458,15 +454,11 @@ WITH visible_repos AS (
         i.status AS status,
         r.name AS repo,
         i.created_at,
-        ts_rank(
-            to_tsvector('english', i.title || ' ' || i.body),
-            plainto_tsquery('english', %s)
-        ) AS rank
+        ts_rank(i.search_vector, plainto_tsquery('english', %s)) AS rank
     FROM issues i
     JOIN visible_repos vr ON vr.id = i.repo_id
     JOIN repositories r ON r.id = i.repo_id
-    WHERE to_tsvector('english', i.title || ' ' || i.body)
-          @@ plainto_tsquery('english', %s)
+    WHERE i.search_vector @@ plainto_tsquery('english', %s)
 ), commit_results AS (
     SELECT
         'commit' AS type,

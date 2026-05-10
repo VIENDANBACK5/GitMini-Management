@@ -16,6 +16,11 @@ class RepoCreate(BaseModel):
     is_private: bool = False
 
 
+class RepoUpdate(BaseModel):
+    description: str = ""
+    is_private: bool = False
+
+
 class RepoMemberCreate(BaseModel):
     username: str = Field(min_length=1, max_length=50)
     role: RepoRole
@@ -61,3 +66,9 @@ class CommitCreate(BaseModel):
     branch: str = Field(default="main")
     message: str = Field(min_length=1)
     files: list[FileChange] = Field(default_factory=list)
+
+
+class BranchCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    from_commit: str | None = Field(default=None, min_length=40, max_length=40)
+    is_protected: bool = False

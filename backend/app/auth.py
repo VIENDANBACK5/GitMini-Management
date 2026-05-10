@@ -1,13 +1,25 @@
 import os
 import secrets
-import time
 
 from fastapi import HTTPException, Request, status
 
 SESSION_COOKIE_NAME = "gitmini_session"
 SESSION_TTL_SECONDS = int(os.getenv("APP_SESSION_TTL_SECONDS", "28800"))
 DEMO_USERS = ("admin", "alice", "bob", "carol", "david")
-SESSIONS: dict[str, dict] = {}
+
+
+def init_sessions_table() -> None:
+    from app.db import execute_one
+    execute_one(
+        """
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            token TEXT PRIMARY KEY,
+            username VARCHAR(50) NOT NULL,
+            expires_at TIMESTAMPTZ NOT NULL,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+        """
+    )
 
 
 def allowed_users() -> set[str]:
@@ -24,24 +36,32 @@ def verify_credentials(username: str, password: str) -> bool:
 
 
 def create_session(username: str) -> str:
+    from app.db import execute_one
     token = secrets.token_urlsafe(32)
-    SESSIONS[token] = {"username": username, "expires_at": time.time() + SESSION_TTL_SECONDS}
+    execute_one(
+        "INSERT INTO user_sessions (token, username, expires_at) VALUES (%s, %s, NOW() + %s * INTERVAL '1 second') ON CONFLICT (token) DO UPDATE SET username = EXCLUDED.username, expires_at = EXCLUDED.expires_at",
+        (token, username, SESSION_TTL_SECONDS),
+    )
+    execute_one("DELETE FROM user_sessions WHERE expires_at <= NOW()")
     return token
 
 
 def delete_session(token: str | None) -> None:
-    if token:
-        SESSIONS.pop(token, None)
+    if not token:
+        return
+    from app.db import execute_one
+    execute_one("DELETE FROM user_sessions WHERE token = %s", (token,))
 
 
 def require_user(request: Request) -> str:
+    from app.db import fetch_one
     token = request.cookies.get(SESSION_COOKIE_NAME)
-    session = SESSIONS.get(token) if token else None
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    session = fetch_one(
+        "SELECT username FROM user_sessions WHERE token = %s AND expires_at > NOW()",
+        (token,),
+    )
     if not session:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-
-    if session["expires_at"] <= time.time():
-        delete_session(token)
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
-
     return session["username"]

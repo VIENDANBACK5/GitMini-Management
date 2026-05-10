@@ -2,12 +2,10 @@ import { useEffect, useState } from 'react';
 import {
   Alert,
   Avatar,
-  Badge,
   Button,
   Card,
   Checkbox,
   Col,
-  Dropdown,
   Empty,
   Form,
   Input,
@@ -25,6 +23,7 @@ import {
   Timeline,
   Tooltip,
   Typography,
+  message,
 } from 'antd';
 import {
   AlertCircle,
@@ -33,6 +32,7 @@ import {
   Book,
   Clock,
   Database,
+  FileText,
   GitBranch,
   GitCommit,
   GitPullRequest,
@@ -41,8 +41,9 @@ import {
   LogOut,
   Plus,
   Search,
+  Settings,
   ShieldCheck,
-  User,
+  Trash2,
 } from 'lucide-react';
 import { api, demoUsers, login, logout } from './api.js';
 
@@ -72,7 +73,7 @@ function mergeBlockedReason(reason) {
 }
 
 function canViewMembers(role) {
-  return ['admin', 'owner', 'maintainer'].includes(role);
+  return ['admin', 'owner', 'maintainer', 'developer', 'reviewer'].includes(role);
 }
 
 function canManageMembers(role) {
@@ -134,6 +135,11 @@ export default function App() {
   const [repoCapabilities, setRepoCapabilities] = useState({});
   const [members, setMembers] = useState([]);
   const [memberError, setMemberError] = useState('');
+  const [branches, setBranches] = useState([]);
+  const [selectedBranch, setSelectedBranch] = useState(null);
+  const [commitFiles, setCommitFiles] = useState([]);
+  const [selectedCommit, setSelectedCommit] = useState(null);
+  const [issueRepoFilter, setIssueRepoFilter] = useState(null);
   const [memberForm] = Form.useForm();
   const selectedRepoCapability = selectedRepo ? repoCapabilities[selectedRepo] : null;
   const selectedRepoRole = selectedRepoCapability?.current_user_role;
@@ -168,12 +174,17 @@ export default function App() {
         setRepoCapabilities(Object.fromEntries(repos.map((item) => [item.name, item])));
         setData(repos);
       } else if (nextView === 'history') {
-        const [repoDetail, history] = await Promise.all([
+        const historyUrl = selectedBranch
+          ? `/repos/${encodeURIComponent(repo)}/history?branch=${encodeURIComponent(selectedBranch)}`
+          : `/repos/${encodeURIComponent(repo)}/history`;
+        const [repoDetail, history, branchList] = await Promise.all([
           api(`/repos/${encodeURIComponent(repo)}`),
-          api(`/repos/${encodeURIComponent(repo)}/history`),
+          api(historyUrl),
+          api(`/repos/${encodeURIComponent(repo)}/branches`),
         ]);
         setRepoCapabilities((current) => ({ ...current, [repo]: repoDetail }));
         setData(history);
+        setBranches(Array.isArray(branchList) ? branchList : []);
         if (canViewMembers(repoDetail.current_user_role)) {
           await loadMembers(repo);
         } else {
@@ -181,7 +192,8 @@ export default function App() {
           setMemberError('');
         }
       } else if (nextView === 'issues') {
-        setData(await api('/issues'));
+        const issueUrl = issueRepoFilter ? `/issues?repo=${encodeURIComponent(issueRepoFilter)}` : '/issues';
+        setData(await api(issueUrl));
       } else if (nextView === 'pulls') {
         setData(await api('/pulls'));
       } else if (nextView === 'analytics') {
@@ -218,6 +230,91 @@ export default function App() {
     }
   }
 
+  async function loadHistory(repo, branch) {
+    setLoading(true);
+    setError('');
+    try {
+      const url = branch
+        ? `/repos/${encodeURIComponent(repo)}/history?branch=${encodeURIComponent(branch)}`
+        : `/repos/${encodeURIComponent(repo)}/history`;
+      setData(await api(url));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function createBranch(values) {
+    if (!selectedRepo) return;
+    setLoading(true);
+    setError('');
+    try {
+      await api(`/repos/${encodeURIComponent(selectedRepo)}/branches`, 'POST', {
+        name: values.name.trim(),
+        is_protected: Boolean(values.is_protected),
+      });
+      setModal(null);
+      const branchList = await api(`/repos/${encodeURIComponent(selectedRepo)}/branches`);
+      setBranches(Array.isArray(branchList) ? branchList : []);
+      message.success(`Branch "${values.name.trim()}" created`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function deleteBranch(branchName) {
+    if (!selectedRepo) return;
+    setLoading(true);
+    try {
+      const branchPath = branchName.split('/').map(encodeURIComponent).join('/');
+      await api(`/repos/${encodeURIComponent(selectedRepo)}/branches/${branchPath}`, 'DELETE');
+      if (selectedBranch === branchName) {
+        setSelectedBranch(null);
+        await loadHistory(selectedRepo, null);
+      }
+      const branchList = await api(`/repos/${encodeURIComponent(selectedRepo)}/branches`);
+      setBranches(Array.isArray(branchList) ? branchList : []);
+      message.success(`Branch "${branchName}" deleted`);
+    } catch (err) {
+      message.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadCommitFiles(hash) {
+    setSelectedCommit(hash);
+    setCommitFiles([]);
+    setModal('commit_files');
+    try {
+      const files = await api(`/repos/${encodeURIComponent(selectedRepo)}/commits/${hash}/files`);
+      setCommitFiles(Array.isArray(files) ? files : []);
+    } catch (err) {
+      message.error(err.message);
+    }
+  }
+
+  async function updateRepo(values) {
+    if (!selectedRepo) return;
+    setLoading(true);
+    try {
+      await api(`/repos/${encodeURIComponent(selectedRepo)}`, 'PATCH', {
+        description: values.description?.trim() || '',
+        is_private: Boolean(values.is_private),
+      });
+      setModal(null);
+      message.success('Repository updated');
+      await load('history', selectedRepo);
+    } catch (err) {
+      message.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function resetAppState() {
     setSelectedRepo(null);
     setView('repos');
@@ -226,6 +323,11 @@ export default function App() {
     setMemberError('');
     setRepoCapabilities({});
     setError('');
+    setBranches([]);
+    setSelectedBranch(null);
+    setCommitFiles([]);
+    setSelectedCommit(null);
+    setIssueRepoFilter(null);
   }
 
   async function handleLogin(values) {
@@ -254,6 +356,7 @@ export default function App() {
 
   function openRepo(repoName) {
     setSelectedRepo(repoName);
+    setSelectedBranch(null);
     setView('history');
   }
 
@@ -377,18 +480,30 @@ export default function App() {
   }
 
   async function updateIssue(issueId, status) {
-    await api(`/issues/${encodeURIComponent(issueId)}`, 'PATCH', { status });
-    await load('issues', selectedRepo);
+    try {
+      await api(`/issues/${encodeURIComponent(issueId)}`, 'PATCH', { status });
+      await load('issues', selectedRepo);
+    } catch (err) {
+      message.error(err.message);
+    }
   }
 
   async function updatePull(pullId, status) {
-    await api(`/pulls/${encodeURIComponent(pullId)}`, 'PATCH', { status });
-    await load('pulls', selectedRepo);
+    try {
+      await api(`/pulls/${encodeURIComponent(pullId)}`, 'PATCH', { status });
+      await load('pulls', selectedRepo);
+    } catch (err) {
+      message.error(err.message);
+    }
   }
 
   async function approvePull(pullId) {
-    await api(`/pulls/${encodeURIComponent(pullId)}/reviews`, 'POST', { status: 'approved' });
-    await load('pulls', selectedRepo);
+    try {
+      await api(`/pulls/${encodeURIComponent(pullId)}/reviews`, 'POST', { status: 'approved' });
+      await load('pulls', selectedRepo);
+    } catch (err) {
+      message.error(err.message);
+    }
   }
 
   async function addMember(values) {
@@ -549,8 +664,8 @@ export default function App() {
 
         <Content className="content-shell">
           {loading ? <Card><Spin tip="Fetching data from SQL..." /></Card> : null}
-          {error ? <Alert type="error" showIcon message="Request failed" description={error} className="content-alert" /> : null}
-          {!loading && !error ? renderContent() : null}
+          {error ? <Alert type="error" showIcon message="Request failed" description={error} className="content-alert" closable onClose={() => setError('')} /> : null}
+          {!loading ? renderContent() : null}
         </Content>
       </Layout>
 
@@ -561,34 +676,79 @@ export default function App() {
   function renderLogin() {
     return (
       <div className="login-shell">
-        <Card className="login-card">
-          <div className="login-brand">
-            <div className="brand-mark"><GitBranch size={28} /></div>
-            <div>
-              <Title level={2}>GitMini Console</Title>
-              <Text type="secondary">Professional database administration demo</Text>
+        <div className="login-split">
+          {/* Left brand panel */}
+          <div className="login-brand-panel">
+            <div className="login-logo-row">
+              <div className="brand-mark"><GitBranch size={22} /></div>
+              <div className="login-logo-text">
+                <h3>GitMini</h3>
+                <span>Enterprise Source Control</span>
+              </div>
+            </div>
+            <div className="login-headline">
+              <h1>Git Infrastructure,<br />Built on PostgreSQL</h1>
+              <p>A production-grade SCM platform powered by PostgreSQL 15. RBAC, Row-Level Security, full-text search, and audit trails — all in pure SQL.</p>
+              <div className="login-features">
+                <div className="login-feature">
+                  <span className="login-feature-icon"><ShieldCheck size={16} /></span>
+                  <span>Row-Level Security &amp; RBAC</span>
+                </div>
+                <div className="login-feature">
+                  <span className="login-feature-icon"><GitBranch size={16} /></span>
+                  <span>Branch protection &amp; merge policies</span>
+                </div>
+                <div className="login-feature">
+                  <span className="login-feature-icon"><BarChart3 size={16} /></span>
+                  <span>Analytics &amp; audit logging</span>
+                </div>
+                <div className="login-feature">
+                  <span className="login-feature-icon"><Database size={16} /></span>
+                  <span>20 normalized tables, full ACID</span>
+                </div>
+              </div>
+            </div>
+            <div className="login-brand-footer">
+              <div className="status-badge">
+                <span className="status-dot" />
+                PostgreSQL 15 · 20 Tables · Docker
+              </div>
             </div>
           </div>
-          <Paragraph type="secondary">
-            Sign in with a demo account to manage repositories, permissions, pull requests, analytics and audit logs.
-          </Paragraph>
 
-          <Form layout="vertical" initialValues={{ username: 'alice' }} onFinish={handleLogin}>
-            <Form.Item label="Demo user" name="username" rules={[{ required: true }]}>
-              <Select
-                options={demoUsers.map((user) => ({
-                  value: user.username,
-                  label: `${user.label} (${user.username}) — ${user.description}`,
-                }))}
-              />
-            </Form.Item>
-            <Form.Item label="Password" name="password" rules={[{ required: true, message: 'Enter the demo password' }]}>
-              <Password placeholder="gitmini_password" />
-            </Form.Item>
-            {loginError ? <Alert type="error" showIcon message={loginError} /> : null}
-            <Button type="primary" htmlType="submit" loading={loading} block size="large">Sign in</Button>
-          </Form>
-        </Card>
+          {/* Right form panel */}
+          <div className="login-form-panel">
+            <div className="login-form-logo">
+              <div className="brand-mark"><GitBranch size={18} /></div>
+              <span>GitMini</span>
+            </div>
+            <h2 className="login-form-title">Sign in to GitMini</h2>
+            <p className="login-form-sub">Choose a demo account to explore the platform.</p>
+
+            <Form layout="vertical" initialValues={{ username: 'alice' }} onFinish={handleLogin}>
+              <Form.Item label="Demo account" name="username" rules={[{ required: true }]}>
+                <Select
+                  size="large"
+                  options={demoUsers.map((user) => ({
+                    value: user.username,
+                    label: `${user.label} · ${user.username}`,
+                  }))}
+                />
+              </Form.Item>
+              <Form.Item label="Password" name="password" rules={[{ required: true, message: 'Enter the demo password' }]}>
+                <Password size="large" placeholder="gitmini_password" />
+              </Form.Item>
+              {loginError ? <Alert type="error" showIcon message={loginError} style={{ marginBottom: 16 }} /> : null}
+              <Button type="primary" htmlType="submit" loading={loading} block size="large">
+                Sign in
+              </Button>
+            </Form>
+
+            <div className="login-form-footer">
+              Demo password: <code>gitmini_password</code> · All accounts share the same password
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -635,18 +795,38 @@ export default function App() {
   }
 
   function renderHistory() {
+    const branchOptions = branches.map((b) => ({ value: b.name, label: b.name }));
+
     return (
       <div>
         <SectionHeader title={`Commit History`} selectedRepo={selectedRepo}>
           {selectedRepoCapability ? <RoleTag role={selectedRepoCapability.current_user_role} /> : null}
+          <Select
+            allowClear
+            placeholder="All branches"
+            value={selectedBranch}
+            options={branchOptions}
+            style={{ minWidth: 160 }}
+            onChange={(val) => {
+              setSelectedBranch(val ?? null);
+              loadHistory(selectedRepo, val ?? null);
+            }}
+          />
+          {['owner', 'maintainer', 'developer'].includes(selectedRepoRole) && (
+            <Button icon={<GitBranch size={16} />} onClick={() => setModal('branch')}>New Branch</Button>
+          )}
           {['owner', 'maintainer', 'developer'].includes(selectedRepoRole) && (
             <Button type="primary" icon={<Plus size={16} />} onClick={() => setModal('commit')}>Simulate Push</Button>
           )}
           {(me.system_role === 'admin' || selectedRepoRole === 'owner') && (
-            <Button danger onClick={() => setModal('delete_repo')}>Delete Repository</Button>
+            <Button icon={<Settings size={16} />} onClick={() => setModal('edit_repo')}>Edit</Button>
+          )}
+          {(me.system_role === 'admin' || selectedRepoRole === 'owner') && (
+            <Button danger onClick={() => setModal('delete_repo')}>Delete</Button>
           )}
           <Button icon={<ArrowLeft size={16} />} onClick={() => setView('repos')}>Back</Button>
         </SectionHeader>
+        {renderBranches()}
         {renderMembers()}
         {Array.isArray(data) && data.length ? (
           <Card className="dashboard-card">
@@ -654,10 +834,11 @@ export default function App() {
               items={data.map((item) => ({
                 color: 'blue',
                 children: (
-                  <div className="timeline-commit">
+                  <div className="timeline-commit" style={{ cursor: 'pointer' }} onClick={() => loadCommitFiles(item.hash)}>
                     <Tag color="geekblue">{(item.hash || '').substring(0, 7)}</Tag>
                     <Text strong>{item.message}</Text>
                     <Text type="secondary">{item.author || 'unknown'} · {formatDate(item.date)}</Text>
+                    <Tag style={{ marginLeft: 4 }} color="default"><FileText size={11} /> files</Tag>
                   </div>
                 ),
               }))}
@@ -665,6 +846,45 @@ export default function App() {
           </Card>
         ) : <Empty description="No commits found for this repository." />}
       </div>
+    );
+  }
+
+  function renderBranches() {
+    if (!branches.length) return null;
+    return (
+      <Card
+        className="dashboard-card"
+        title={<Space><GitBranch size={18} />Branches ({branches.length})</Space>}
+        style={{ marginBottom: 16 }}
+      >
+        <Space wrap>
+          {branches.map((b) => (
+            <Space key={b.name} size={2}>
+              <Tag
+                color={selectedBranch === b.name ? 'blue' : 'default'}
+                icon={b.is_protected ? <Lock size={12} /> : null}
+                style={{ cursor: 'pointer', userSelect: 'none', marginRight: 0 }}
+                onClick={() => {
+                  const next = selectedBranch === b.name ? null : b.name;
+                  setSelectedBranch(next);
+                  loadHistory(selectedRepo, next);
+                }}
+              >
+                {b.name}
+              </Tag>
+              {['owner', 'maintainer'].includes(selectedRepoRole) && b.name !== selectedRepoCapability?.default_branch && (
+                <Button
+                  size="small"
+                  danger
+                  type="text"
+                  icon={<Trash2 size={12} />}
+                  onClick={() => deleteBranch(b.name)}
+                />
+              )}
+            </Space>
+          ))}
+        </Space>
+      </Card>
     );
   }
 
@@ -688,9 +908,22 @@ export default function App() {
       },
     ];
 
+    const issueRepos = [...new Set((Array.isArray(data) ? data : []).map((i) => i.repo))].sort();
+    const filteredIssues = issueRepoFilter
+      ? (Array.isArray(data) ? data : []).filter((i) => i.repo === issueRepoFilter)
+      : (Array.isArray(data) ? data : []);
+
     return (
       <div>
-        <SectionHeader title="Global Issues Tracker" selectedRepo={selectedRepo}>
+        <SectionHeader title="Global Issues Tracker" subtitle="All visible repository issues">
+          <Select
+            allowClear
+            placeholder="Filter by repo"
+            value={issueRepoFilter}
+            options={issueRepos.map((r) => ({ value: r, label: r }))}
+            style={{ minWidth: 160 }}
+            onChange={(val) => setIssueRepoFilter(val ?? null)}
+          />
           <Button
             type="primary"
             icon={<Plus size={16} />}
@@ -701,7 +934,7 @@ export default function App() {
           </Button>
         </SectionHeader>
         {selectedRepoCapability && !selectedRepoCapability.can_create_issue ? <Alert type="warning" showIcon message="Your current repo role is read-only for issue creation." className="content-alert" /> : null}
-        <Table rowKey="id" columns={columns} dataSource={Array.isArray(data) ? data : []} pagination={{ pageSize: 8 }} scroll={{ x: 980 }} />
+        <Table rowKey="id" columns={columns} dataSource={filteredIssues} pagination={{ pageSize: 8 }} scroll={{ x: 980 }} />
       </div>
     );
   }
@@ -718,7 +951,7 @@ export default function App() {
         render: (_, pull) => pull.status === 'open' ? (
           <Space wrap>
             <Button disabled={!pull.can_update} onClick={() => updatePull(pull.id, 'closed')}>Close</Button>
-            {pull.author !== me.username ? <Button onClick={() => approvePull(pull.id)}>Approve</Button> : null}
+            {pull.author !== me.username && ['admin', 'owner', 'maintainer', 'reviewer'].includes(pull.current_user_role) ? <Button onClick={() => approvePull(pull.id)}>Approve</Button> : null}
             <Tooltip title={!pull.can_merge ? mergeBlockedReason(pull.merge_blocked_reason) : ''}>
               <Button type="primary" disabled={!pull.can_merge} onClick={() => updatePull(pull.id, 'merged')}>Merge</Button>
             </Tooltip>
@@ -935,7 +1168,7 @@ export default function App() {
 
         <Modal title="Create Pull Request" open={modal === 'pull'} onCancel={() => setModal(null)} footer={null} destroyOnClose>
           {selectedRepoCapability && !selectedRepoCapability.can_create_pull ? <Alert type="warning" showIcon message="Current role cannot create pull requests in this repository." className="content-alert" /> : null}
-          <Form layout="vertical" onFinish={createPull} initialValues={{ repo: selectedRepo || '', source: 'feature/demo', target: 'main' }}>
+          <Form layout="vertical" onFinish={createPull} initialValues={{ repo: selectedRepo || '', source: branches[1]?.name || 'feature/demo', target: selectedRepoCapability?.default_branch || 'main' }}>
             <Form.Item label="Repository" name="repo" rules={[{ required: true, message: 'Enter repository name' }]}>
               <Input placeholder="Repository name" />
             </Form.Item>
@@ -945,12 +1178,16 @@ export default function App() {
             <Row gutter={12}>
               <Col span={12}>
                 <Form.Item label="Source branch" name="source" rules={[{ required: true }]}>
-                  <Input />
+                  {branches.length > 0
+                    ? <Select options={branches.map((b) => ({ value: b.name, label: b.name }))} />
+                    : <Input placeholder="feature/demo" />}
                 </Form.Item>
               </Col>
               <Col span={12}>
                 <Form.Item label="Target branch" name="target" rules={[{ required: true }]}>
-                  <Input />
+                  {branches.length > 0
+                    ? <Select options={branches.map((b) => ({ value: b.name, label: b.is_protected ? `${b.name} 🔒` : b.name }))} />
+                    : <Input placeholder="main" />}
                 </Form.Item>
               </Col>
             </Row>
@@ -963,9 +1200,11 @@ export default function App() {
 
         <Modal title="Simulate Push (Create Commit)" open={modal === 'commit'} onCancel={() => setModal(null)} footer={null} destroyOnClose>
           <Alert type="info" message="Database Demonstration" description="This will insert a real commit, link parents in DAG, and store physical file blobs in PostgreSQL." showIcon style={{ marginBottom: 16 }} />
-          <Form layout="vertical" onFinish={handleCreateCommit} initialValues={{ branch: 'main', filePath: 'hello.txt', fileContent: 'Hello from GitMini!' }}>
+          <Form layout="vertical" onFinish={handleCreateCommit} initialValues={{ branch: selectedRepoCapability?.default_branch || 'main', filePath: 'hello.txt', fileContent: 'Hello from GitMini!' }}>
             <Form.Item label="Target Branch" name="branch" rules={[{ required: true }]}>
-              <Input placeholder="main" />
+              {branches.length > 0
+                ? <Select options={branches.map((b) => ({ value: b.name, label: b.name }))} />
+                : <Input placeholder="main" />}
             </Form.Item>
             <Form.Item label="Commit Message" name="message" rules={[{ required: true, message: 'Enter commit message' }]}>
               <Input placeholder="Initial commit" />
@@ -977,6 +1216,69 @@ export default function App() {
               <TextArea rows={6} placeholder="Enter file content to be stored in file_blobs..." />
             </Form.Item>
             <Button type="primary" htmlType="submit" block loading={loading}>Push Commit</Button>
+          </Form>
+        </Modal>
+
+        <Modal
+          title={<Space><FileText size={16} />Commit {selectedCommit ? selectedCommit.substring(0, 7) : ''} — Changed Files</Space>}
+          open={modal === 'commit_files'}
+          onCancel={() => { setModal(null); setCommitFiles([]); setSelectedCommit(null); }}
+          footer={null}
+          width={700}
+          destroyOnClose
+        >
+          {commitFiles.length === 0
+            ? <Empty description="No file changes recorded for this commit." />
+            : (
+              <Table
+                rowKey="file_path"
+                size="small"
+                pagination={false}
+                dataSource={commitFiles}
+                columns={[
+                  { title: 'File', dataIndex: 'file_path', render: (p) => <Text code>{p}</Text> },
+                  { title: 'Change', dataIndex: 'change_type', render: (t) => <Tag color={t === 'added' ? 'green' : t === 'deleted' ? 'red' : 'blue'}>{t}</Tag>, width: 90 },
+                  { title: 'Size', dataIndex: 'size_bytes', render: (s) => s != null ? `${s} B` : '—', width: 80 },
+                  {
+                    title: 'Content',
+                    dataIndex: 'content',
+                    render: (c) => c
+                      ? <Text type="secondary" style={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap', fontSize: 12 }} ellipsis={{ tooltip: c }}>{c.substring(0, 120)}{c.length > 120 ? '…' : ''}</Text>
+                      : <Text type="secondary">—</Text>,
+                  },
+                ]}
+              />
+            )}
+        </Modal>
+
+        <Modal title="Edit Repository" open={modal === 'edit_repo'} onCancel={() => setModal(null)} footer={null} destroyOnClose>
+          <Form
+            layout="vertical"
+            onFinish={updateRepo}
+            initialValues={{
+              description: selectedRepoCapability?.description || '',
+              is_private: selectedRepoCapability?.is_private || false,
+            }}
+          >
+            <Form.Item label="Description" name="description">
+              <TextArea rows={3} placeholder="Repository description" />
+            </Form.Item>
+            <Form.Item name="is_private" valuePropName="checked">
+              <Checkbox>Private repository</Checkbox>
+            </Form.Item>
+            <Button type="primary" htmlType="submit" block loading={loading}>Save Changes</Button>
+          </Form>
+        </Modal>
+
+        <Modal title="Create New Branch" open={modal === 'branch'} onCancel={() => setModal(null)} footer={null} destroyOnClose>
+          <Form layout="vertical" onFinish={createBranch} initialValues={{ is_protected: false }}>
+            <Form.Item label="Branch name" name="name" rules={[{ required: true, message: 'Enter branch name' }]}>
+              <Input placeholder="feature/my-feature" />
+            </Form.Item>
+            <Form.Item name="is_protected" valuePropName="checked">
+              <Checkbox>Protected branch (requires PR approval to merge)</Checkbox>
+            </Form.Item>
+            <Button type="primary" htmlType="submit" block loading={loading}>Create Branch</Button>
           </Form>
         </Modal>
 
