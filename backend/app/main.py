@@ -1,4 +1,5 @@
 import hashlib
+import os
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -40,6 +41,12 @@ def clamp_limit(limit: int, maximum: int = 200) -> int:
 
 
 def get_or_create_user(username: str) -> str:
+    # Thử tìm ở Slave trước (Read-only)
+    row = fetch_one("SELECT id FROM users WHERE username = %s", (username,))
+    if row:
+        return row["id"]
+    
+    # Nếu không có mới ghi vào Master
     row = execute_one(
         """
         INSERT INTO users (username, email, password_hash, full_name)
@@ -931,3 +938,31 @@ def index():
 assets_dir = FRONTEND_DIR / "assets"
 if assets_dir.exists():
     app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+@app.get("/admin/db-status")
+def get_db_status(user: CurrentUser):
+    # Chỉ user 'admin' mới xem được (theo logic của dự án)
+    if user != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # 1. Lấy trạng thái Replication
+    from app.db import replica_status
+    status = replica_status()
+    
+    # 2. Lấy thống kê Partition
+    partitions = fetch_all("""
+        SELECT
+            inhrelid::regclass::text AS name,
+            pg_size_pretty(pg_total_relation_size(inhrelid)) AS size,
+            (SELECT count(*) FROM commits_partitioned WHERE tableoid = inhrelid) AS rows
+        FROM pg_inherits
+        WHERE inhparent = 'commits_partitioned'::regclass
+        ORDER BY name;
+    """)
+    status["partitions"] = partitions
+    
+    # 3. Lấy thông tin Master/Slave URLs (che bớt password)
+    status["primary_host"] = os.getenv("DATABASE_URL", "").split("@")[-1]
+    status["replica_host"] = os.getenv("DATABASE_REPLICA_URL", "").split("@")[-1]
+    
+    return status

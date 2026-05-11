@@ -1,12 +1,21 @@
 services:
-  # --- Database Service ---
+  # --- Database Service (PRIMARY / MASTER) ---
   db:
-    image: postgres:15-alpine
+    image: postgres:12-alpine
     container_name: gitmini_db_container
     environment:
       POSTGRES_USER: gitmini_user
       POSTGRES_PASSWORD: gitmini_password
       POSTGRES_DB: gitmini_db
+    # Cấu hình WAL cho Streaming Replication
+    command: >
+      postgres
+        -c wal_level=replica
+        -c max_wal_senders=5
+        -c max_replication_slots=5
+        -c wal_keep_segments=32
+        -c hot_standby=on
+        -c log_replication_commands=on
     ports:
       - "5435:5432"
     volumes:
@@ -19,12 +28,49 @@ services:
       - ./sql/05_security_rls.sql:/docker-entrypoint-initdb.d/05_security_rls.sql
       - ./sql/08_phase4_pr_governance.sql:/docker-entrypoint-initdb.d/08_phase4_pr_governance.sql
       - ./sql/09_extend_to_20_tables.sql:/docker-entrypoint-initdb.d/09_extend_to_20_tables.sql
+      # Tạo replication user khi khởi tạo
+      - ./sql/10_replication_setup.sql:/docker-entrypoint-initdb.d/10_replication_setup.sql
+      # Phân mảnh bảng commits
+      - ./sql/11_partitioning.sql:/docker-entrypoint-initdb.d/11_partitioning.sql
+      # pg_hba.conf cho phép replicator kết nối
+      - ./backend/replication/pg_hba_replication.conf:/docker-entrypoint-initdb.d/pg_hba_replication.sh
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U gitmini_user -d gitmini_db"]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: always
+    networks:
+      - gitmini_net
+
+  # --- Database Service (REPLICA / SLAVE) ---
+  db_replica:
+    image: postgres:12-alpine
+    container_name: gitmini_db_replica
+    environment:
+      PGPASSWORD: repl_gitmini_2024
+      PRIMARY_HOST: db
+      PRIMARY_PORT: "5432"
+      REPL_USER: replicator
+      REPL_PASSWORD: repl_gitmini_2024
+    entrypoint: ["/bin/bash", "/replication/init_replica.sh"]
+    ports:
+      - "5436:5432"
+    volumes:
+      - replica_data:/var/lib/postgresql/data
+      - ./backend/replication/init_replica.sh:/replication/init_replica.sh
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gitmini_user -d gitmini_db || pg_isready -U replicator"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: on-failure
+    networks:
+      - gitmini_net
 
   # --- Backend + React Web Service ---
   app:
@@ -35,6 +81,8 @@ services:
     environment:
       # Kết nối tới container 'db' thay vì localhost
       DATABASE_URL: postgresql://gitmini_user:gitmini_password@db:5432/gitmini_db
+      # Replica URL cho read-only queries
+      DATABASE_REPLICA_URL: postgresql://gitmini_user:gitmini_password@db_replica:5432/gitmini_db
     ports:
       - "8099:8000"
     volumes:
@@ -50,6 +98,13 @@ services:
       timeout: 5s
       retries: 5
     restart: always
+    networks:
+      - gitmini_net
+
+networks:
+  gitmini_net:
+    driver: bridge
 
 volumes:
   postgres_data:
+  replica_data:

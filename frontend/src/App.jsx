@@ -200,6 +200,8 @@ export default function App() {
         setData(await api('/analytics'));
       } else if (nextView === 'audit') {
         setData(await api('/admin/audit-logs'));
+      } else if (nextView === 'db-admin') {
+        setData(await api('/admin/db-status'));
       }
     } catch (err) {
       setError(err.message);
@@ -611,6 +613,9 @@ export default function App() {
     me.system_role === 'admin'
       ? { key: 'audit', icon: <Icon><Lock size={18} /></Icon>, label: 'Audit Logs' }
       : null,
+    me.system_role === 'admin'
+      ? { key: 'db-admin', icon: <Icon><Database size={18} /></Icon>, label: 'Database Admin' }
+      : null,
   ].filter(Boolean);
 
   const selectedMenuKey = ['history', 'search'].includes(view) ? 'repos' : view;
@@ -760,6 +765,7 @@ export default function App() {
     if (view === 'pulls') return renderPulls();
     if (view === 'analytics') return renderAnalytics();
     if (view === 'audit') return renderAudit();
+    if (view === 'db-admin') return renderDatabaseAdmin();
     if (view === 'search') return renderSearch();
     return null;
   }
@@ -1032,6 +1038,62 @@ export default function App() {
       <div>
         <SectionHeader title="Audit Logs" subtitle="Admin-only accountability trail for sensitive operations." />
         <Table rowKey="id" columns={columns} dataSource={Array.isArray(data) ? data : []} pagination={{ pageSize: 10 }} scroll={{ x: 1100 }} />
+      </div>
+    );
+  }
+
+  function renderDatabaseAdmin() {
+    const status = data || {};
+    const partitions = status.partitions || [];
+
+    const replicationMetrics = [
+      ['State', status.state || 'Inactive', <ShieldCheck size={22} />],
+      ['Replica Active', status.replica_active ? 'YES' : 'NO', <Database size={22} />],
+      ['WAL Lag', status.lag || '0 bytes', <Clock size={22} />],
+      ['Sync State', status.sync_state || 'N/A', <GitBranch size={22} />],
+    ];
+
+    const partColumns = [
+      { title: 'Partition Name', dataIndex: 'name', key: 'name', render: (name) => <Tag color="blue">{name}</Tag> },
+      { title: 'Rows', dataIndex: 'rows', key: 'rows', render: (rows) => <Text strong>{rows}</Text> },
+      { title: 'Disk Size', dataIndex: 'size', key: 'size' },
+    ];
+
+    return (
+      <div className="db-admin-panel">
+        <SectionHeader title="Database Administration" subtitle="Real-time Streaming Replication & Partitioning Metrics" />
+        
+        <Title level={5} style={{ marginBottom: 16 }}><GitBranch size={18} style={{ marginRight: 8 }} />Streaming Replication (Master-Slave)</Title>
+        <Row gutter={[18, 18]} style={{ marginBottom: 32 }}>
+          <Col span={24}>
+            <Alert 
+              type={status.replica_active ? "success" : "warning"}
+              showIcon
+              message={status.replica_active ? "Replica is connected and streaming" : "Replica is disconnected"}
+              description={`Primary: ${status.primary_host} | Replica: ${status.replica_host}`}
+              style={{ marginBottom: 18 }}
+            />
+          </Col>
+          {replicationMetrics.map(([label, value, icon]) => (
+            <Col xs={24} sm={12} xl={6} key={label}>
+              <Card className="dashboard-card"><Statistic title={label} value={value} prefix={icon} /></Card>
+            </Col>
+          ))}
+        </Row>
+
+        <Title level={5} style={{ marginBottom: 16 }}><Database size={18} style={{ marginRight: 8 }} />Table Partitioning (Local Sharding)</Title>
+        <Card className="dashboard-card" title="Commits Table Partitions (By Year)">
+          <Paragraph type="secondary">
+            PostgreSQL is using <strong>RANGE Partitioning</strong> on <code>committed_at</code>. 
+            Queries filtering by year will only scan the specific partition below (Partition Pruning).
+          </Paragraph>
+          <Table 
+            rowKey="name" 
+            columns={partColumns} 
+            dataSource={partitions} 
+            pagination={false} 
+          />
+        </Card>
       </div>
     );
   }
