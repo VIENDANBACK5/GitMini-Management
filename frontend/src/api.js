@@ -8,17 +8,36 @@ export const demoUsers = [
 
 const API_BASE = window.location.origin;
 
-export async function api(path, method = 'GET', body = null) {
-  const options = {
-    method,
-    credentials: 'same-origin',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+export async function api(path, methodOrOptions = 'GET', body = null) {
+  const requestOptions =
+    typeof methodOrOptions === 'string'
+      ? {
+          method: methodOrOptions,
+          body,
+        }
+      : { ...methodOrOptions };
+
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(requestOptions.headers || {}),
   };
 
-  if (body) {
-    options.body = JSON.stringify(body);
+  let requestBody = requestOptions.body;
+  if (requestBody && typeof requestBody !== 'string' && !(requestBody instanceof FormData)) {
+    requestBody = JSON.stringify(requestBody);
+  }
+
+  const options = {
+    method: requestOptions.method || 'GET',
+    credentials: 'same-origin',
+    ...requestOptions,
+    headers,
+  };
+
+  if (requestBody != null) {
+    options.body = requestBody;
+  } else {
+    delete options.body;
   }
 
   const response = await fetch(`${API_BASE}${path}`, options);
@@ -32,6 +51,15 @@ export async function api(path, method = 'GET', body = null) {
       // Keep the raw response text when it is not JSON.
     }
     throw new Error(message);
+  }
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  const responseType = response.headers.get('content-type') || '';
+  if (!responseType.includes('application/json')) {
+    return response.text();
   }
 
   return response.json();

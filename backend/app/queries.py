@@ -443,6 +443,22 @@ WITH visible_repos AS (
     FROM repositories r
     LEFT JOIN repo_members current_member ON current_member.repo_id = r.id AND current_member.user_id = %s
     WHERE %s = 'admin' OR r.is_private = FALSE OR r.owner_id = %s OR current_member.user_id IS NOT NULL
+), repo_results AS (
+    SELECT
+        'repository' AS type,
+        r.id::text AS id,
+        NULL::text AS hash,
+        r.name AS title,
+        r.description AS body,
+        NULL::text AS message,
+        'active' AS status,
+        r.name AS repo,
+        r.created_at,
+        ts_rank(to_tsvector('english', r.name || ' ' || COALESCE(r.description, '')), plainto_tsquery('english', %s)) AS rank
+    FROM repositories r
+    JOIN visible_repos vr ON vr.id = r.id
+    WHERE to_tsvector('english', r.name || ' ' || COALESCE(r.description, '')) @@ plainto_tsquery('english', %s)
+       OR r.name ILIKE '%%' || %s || '%%'
 ), issue_results AS (
     SELECT
         'issue' AS type,
@@ -459,6 +475,7 @@ WITH visible_repos AS (
     JOIN visible_repos vr ON vr.id = i.repo_id
     JOIN repositories r ON r.id = i.repo_id
     WHERE i.search_vector @@ plainto_tsquery('english', %s)
+       OR i.title ILIKE '%%' || %s || '%%'
 ), commit_results AS (
     SELECT
         'commit' AS type,
@@ -470,18 +487,17 @@ WITH visible_repos AS (
         'commit' AS status,
         r.name AS repo,
         c.created_at,
-        ts_rank(
-            to_tsvector('english', c.message),
-            plainto_tsquery('english', %s)
-        ) AS rank
+        ts_rank(to_tsvector('english', c.message), plainto_tsquery('english', %s)) AS rank
     FROM commits c
     JOIN visible_repos vr ON vr.id = c.repo_id
     JOIN repositories r ON r.id = c.repo_id
-    WHERE to_tsvector('english', c.message)
-          @@ plainto_tsquery('english', %s)
+    WHERE to_tsvector('english', c.message) @@ plainto_tsquery('english', %s)
+       OR c.message ILIKE '%%' || %s || '%%'
 )
 SELECT *
 FROM (
+    SELECT * FROM repo_results
+    UNION ALL
     SELECT * FROM issue_results
     UNION ALL
     SELECT * FROM commit_results

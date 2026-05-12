@@ -38,3 +38,5 @@ PROJECT_HANDOFF.md
 Thumbs.db
 .vscode/
 .idea/
+
+node_modules/

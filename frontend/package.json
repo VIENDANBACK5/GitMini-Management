@@ -1,1 +1,28 @@
-{"scripts":{"dev":"vite --host 0.0.0.0","build":"vite build","preview":"vite preview --host 0.0.0.0"},"dependencies":{"@vitejs/plugin-react":"latest","antd":"^6.3.7","lucide-react":"latest","react":"latest","react-dom":"latest","vite":"latest"}}
+{
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@radix-ui/react-slot": "latest",
+    "@vitejs/plugin-react": "latest",
+    "class-variance-authority": "latest",
+    "clsx": "latest",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "tailwind-merge": "latest",
+    "tailwindcss-animate": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "autoprefixer": "10.4.17",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "postcss": "8.4.35",
+    "tailwindcss": "3.4.1"
+  }
+}

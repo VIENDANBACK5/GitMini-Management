@@ -867,7 +867,7 @@ def search_global(
     limit: int = Query(default=50, ge=1, le=100),
 ):
     ctx = current_context(current_user)
-    return fetch_all(queries.GLOBAL_SEARCH, (ctx["id"], ctx["username"], ctx["id"], q, q, q, q, clamp_limit(limit, 100)))
+    return fetch_all(queries.GLOBAL_SEARCH, (ctx["id"], ctx["username"], ctx["id"], q, q, q, q, q, q, q, q, q, clamp_limit(limit, 100)))
 
 
 @app.get("/analytics")
