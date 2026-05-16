@@ -11,6 +11,8 @@ services:
     command: >
       postgres
         -c wal_level=replica
+        -c archive_mode=on
+        -c archive_command='test ! -f /var/lib/postgresql/data/archive/%f && cp %p /var/lib/postgresql/data/archive/%f'
         -c max_wal_senders=5
         -c max_replication_slots=5
         -c wal_keep_segments=32

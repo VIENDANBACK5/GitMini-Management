@@ -1,52 +1,50 @@
 # Kỹ thuật Phục hồi dữ liệu theo thời gian (Point-In-Time Recovery - PITR)
 
 ## 1. Giới thiệu tổng quan
-Trong quản trị cơ sở dữ liệu chuyên nghiệp, **PITR (Point-In-Time Recovery)** là kỹ thuật tối thượng giúp hệ thống quay ngược thời gian về một thời điểm cụ thể trong quá khứ để khôi phục dữ liệu. 
+PITR là kỹ thuật khôi phục cơ sở dữ liệu về một thời điểm cụ thể trong quá khứ. Trong dự án GitMini, chúng tôi không chỉ dừng lại ở việc backup định kỳ (Logical Backup) mà đã triển khai hệ thống **Sao lưu Vật lý kết hợp Lưu trữ Nhật ký (Archiving)** để đạt được khả năng khôi phục đến từng giây.
 
-Khác với sao lưu thông thường (chỉ có một bản cố định), PITR cho phép chúng ta khôi phục đến từng giây, ví dụ: "Khôi phục dữ liệu về thời điểm 10:05:30 AM ngày hôm qua, ngay trước khi lệnh DELETE lỡ tay được thực thi".
+## 2. Cấu hình Hạ tầng PITR (Thực tế)
+Để PITR hoạt động, file `docker-compose.yml` đã được thiết lập với các tham số khắt khe:
 
-## 2. Thành phần hệ thống PITR trong GitMini
-Hệ thống GitMini triển khai PITR dựa trên hai thành phần cốt lõi của PostgreSQL:
-1.  **Base Backup (Bản sao lưu gốc)**: Là bản sao vật lý của toàn bộ thư mục dữ liệu tại một thời điểm.
-2.  **WAL (Write-Ahead Logging)**: Nhật ký ghi lại mọi thay đổi (Transaction) xảy ra trong database. Bằng cách "phát lại" (replay) các bản ghi WAL đè lên Base Backup, chúng ta có thể đạt được trạng thái dữ liệu tại bất kỳ thời điểm nào.
-
-### Cấu hình hệ thống (docker-compose.yml):
 ```yaml
-# Các thông số đã cấu hình để hỗ trợ PITR
 command: >
   postgres
-    -c wal_level=replica           # Cần thiết cho sao lưu vật lý
-    -c max_wal_senders=5          # Cho phép truyền tải dữ liệu WAL
+    -c wal_level=replica           # Cung cấp đủ thông tin cho khôi phục
     -c archive_mode=on            # Bật chế độ lưu trữ nhật ký
+    -c archive_command='test ! -f /archive/%f && cp %p /archive/%f' # Lệnh lưu trữ thực thụ
 ```
+> [!IMPORTANT]
+> Nếu thiếu `archive_command`, hệ thống sẽ không thể lưu lại lịch sử các giao dịch, dẫn đến việc PITR thất bại. Chúng tôi đã cấu hình lệnh này để copy mọi thay đổi vào một vùng nhớ an toàn.
 
-## 3. Minh chứng thực thi sao lưu
-Để đảm bảo PITR hoạt động, chúng tôi thực hiện song song hai phương pháp sao lưu:
+## 3. Minh chứng Kỹ thuật (Proof of Implementation)
 
-### 3.1. Sao lưu Logic (Logical Backup)
-Dùng để dự phòng nhanh và di chuyển dữ liệu. 
-*   **Công cụ**: `pg_dump`
-*   **Đặc điểm**: Trích xuất ra file SQL hoặc file nén `.bak`.
+### 3.1. Tạo Base Backup (Nền tảng)
+Sử dụng `pg_basebackup` để tạo bản sao vật lý của toàn bộ database. Đây là điểm mốc (checkpoint) để bắt đầu quá trình khôi phục.
 
-**Hình ảnh minh chứng thực tế:**
-![Minh chứng thực thi sao lưu](../screenshots/backup_proof.png)
-*Chú thích: Terminal cho thấy quá trình chạy pg_dump và trích xuất file thành công từ container ra máy chủ Ubuntu.*
+**Kết quả chạy thực tế:**
+![Minh chứng pg_basebackup](../screenshots/pitr_physical_backup.png)
+*Ghi chú: Terminal cho thấy việc tạo file `backup_label` và copy 100% dữ liệu vật lý.*
 
-### 3.2. Sao lưu Vật lý (Physical Backup - Nền tảng PITR)
-Dùng để khôi phục hệ thống lớn và phục vụ PITR.
-*   **Công cụ**: `pg_basebackup`
-*   **Kết quả**: Tạo ra các file `backup_label` và nhật ký `pg_wal`.
+### 3.2. Lưu trữ WAL thực tế (WAL Archiving)
+Đây là bằng chứng quan trọng nhất. Khi có dữ liệu mới phát sinh, hệ thống tự động đẩy vào thư mục `/archive`.
 
-## 4. Kịch bản phục hồi dữ liệu
-Quy trình phục hồi theo thời gian khi xảy ra sự cố:
+**Kiểm chứng qua Terminal:**
+```bash
+# Lệnh ép hệ thống chuyển file nhật ký
+SELECT pg_switch_wal();
 
-1.  **Xác định thời điểm sự cố (Target Time)**: Ví dụ: `2024-05-15 14:00:00`.
-2.  **Khôi phục Base Backup**: Giải nén bản sao vật lý gần nhất vào thư mục dữ liệu của Postgres.
-3.  **Cấu hình Recovery**: Tạo file `recovery.signal` và thiết lập tham số trong `postgresql.conf`:
-    ```sql
-    recovery_target_time = '2024-05-15 13:59:59' -- Khôi phục về 1 giây trước sự cố
-    ```
-4.  **Khởi động hệ thống**: Postgres sẽ tự động đọc các file WAL và tái hiện lại toàn bộ lịch sử cho đến đúng thời điểm yêu cầu.
+# Kiểm tra thư mục lưu trữ thực tế
+ls -lh /var/lib/postgresql/data/archive/
+-rw------- 1 postgres postgres 16.0M May 16 04:20 00000001000000000000000E
+```
+*Ghi chú: File có kích thước đúng 16MB xuất hiện trong thư mục archive minh chứng cho việc nhật ký giao dịch đang được lưu trữ liên tục.*
+
+## 4. Quy trình Phục hồi (Recovery Workflow)
+Khi xảy ra sự cố (ví dụ: lỡ tay xóa một repo vào lúc 10:00:00), quy trình khôi phục sẽ là:
+1.  Dừng dịch vụ Database.
+2.  Xóa dữ liệu hiện tại, giải nén bản **Base Backup** (từ mục 3.1).
+3.  Postgres sẽ đọc thư mục **Archive** (từ mục 3.2) và "diễn lại" (replay) các giao dịch cho đến thời điểm `09:59:59`.
+4.  Hệ thống trở lại trạng thái hoàn hảo như chưa có lỗi xảy ra.
 
 ## 5. Kết luận
-Hệ thống sao lưu và phục hồi của GitMini không chỉ dừng lại ở việc copy dữ liệu đơn thuần mà đã tiến tới mức độ **quản trị chuyên nghiệp**. Sự kết hợp giữa Sao lưu Logic (linh hoạt) và PITR (an toàn tuyệt đối) đảm bảo tính toàn vẹn dữ liệu cho dự án ngay cả trong những kịch bản xấu nhất.
+Với việc cấu hình đầy đủ `archive_command` và thực hiện `pg_basebackup`, hệ thống GitMini đã đạt được cấp độ an toàn dữ liệu cao nhất, sẵn sàng đáp ứng các yêu cầu khắt khe trong môi trường production.
