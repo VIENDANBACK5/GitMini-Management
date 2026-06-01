@@ -1,5 +1,11 @@
 import { Badge } from './ui/badge';
 import { cn } from '../lib/utils';
+import {
+  Status,
+  StatusIndicator,
+  StatusLabel,
+} from "@/components/ui/status";
+
 
 export function formatDate(value) {
   if (!value) return 'N/A';
@@ -30,16 +36,21 @@ export function canManageMembers(role) {
 
 export function StatusBadge({ status }) {
   const variants = {
-    open: 'default',
-    success: 'default',
-    closed: 'destructive',
-    failed: 'destructive',
-    merged: 'secondary',
-    approved: 'secondary',
-    running: 'outline',
-    queued: 'outline',
+    open: 'success',
+    success: 'success',
+    closed: 'error',
+    failed: 'error',
+    merged: 'success',
+    approved: 'success',
+    running: 'info',
+    queued: 'info',
   };
-  return <Badge variant={variants[status] || 'outline'}>{status}</Badge>;
+  return (
+    <Status variant={variants[status] || 'default'}>
+      <StatusIndicator />
+      <StatusLabel className="capitalize">{status}</StatusLabel>
+    </Status>
+  )
 }
 
 export function RoleBadge({ role }) {
@@ -51,7 +62,7 @@ export function RoleBadge({ role }) {
     reviewer: "outline",
     viewer: "outline",
   };
-  return <Badge variant={variants[role] || "outline"} className="capitalize font-mono text-[10px]">{role}</Badge>;
+  return <Badge variant={variants[role] || "outline"} className="capitalize">{role}</Badge>;
 }
 
 export function StatusTag({ status }) {

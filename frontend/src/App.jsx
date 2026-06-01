@@ -51,12 +51,12 @@ import { SearchScreen } from './screens/SearchScreen';
 function AppDialog({ open, onOpenChange, title, width = 520, footer = null, children }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent width={width}>
+      <DialogContent width={width} className="dark">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <DialogClose />
-        <div className="px-6 py-5">{children}</div>
+        <div className="px-6 py-5 border rounded-lg border-slate-600">{children}</div>
         {footer ? <DialogFooter>{footer}</DialogFooter> : null}
       </DialogContent>
     </Dialog>
@@ -472,7 +472,7 @@ export default function App() {
             >
               {item.icon}
               <span>{item.label}</span>
-              {selectedMenuKey === item.key && <ChevronRight className="ml-auto h-4 w-4 opacity-50" />}
+              {selectedMenuKey === item.key}
             </button>
           ))}
         </nav>
@@ -525,10 +525,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center space-x-4">
-            <div className="hidden md:flex items-center bg-blue-500/10 text-blue-400 px-3 py-1 rounded-full text-xs font-semibold border border-blue-500/20">
-              <Database className="h-3 w-3 mr-2" />
-              v12 Streaming Replication
-            </div>
             <Button size="sm" onClick={() => setModal('repo')}>
               <Plus className="h-4 w-4 mr-2" />
               New Repository
@@ -542,7 +538,7 @@ export default function App() {
             <div className="flex items-center justify-center py-20">
               <div className="flex flex-col items-center space-y-4">
                 <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                <p className="text-sm text-slate-500 font-medium italic">Querying Postgres Engine...</p>
+                <p className="text-sm text-slate-500 font-medium italic">Loading...</p>
               </div>
             </div>
           )}

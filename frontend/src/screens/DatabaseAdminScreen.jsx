@@ -54,10 +54,9 @@ export function DatabaseAdminScreen({ data, load }) {
 
       {/* Partitions Table */}
       <Card className="bg-slate-900/40 border-slate-800 overflow-hidden">
-        <CardHeader className="bg-slate-900/60 border-b border-slate-800">
+        <CardHeader className="bborder-b">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-lg">Commit Table Partitions</CardTitle>
-            <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/20 font-mono">Range Sharding Active</Badge>
+            <CardTitle className="text-lg font-bold">Commit Table Partitions</CardTitle>
           </div>
         </CardHeader>
         <CardContent className="p-0">

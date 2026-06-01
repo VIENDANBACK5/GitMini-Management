@@ -23,6 +23,7 @@ export function PullsScreen({ data, me, openPullModal, updatePull, approvePull }
               <th className="px-4 py-3">Repo</th>
               <th className="px-4 py-3">Branches</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Protected</th>
               <th className="px-4 py-3">Updated</th>
               <th className="px-4 py-3">Actions</th>
             </tr>
@@ -37,11 +38,10 @@ export function PullsScreen({ data, me, openPullModal, updatePull, approvePull }
                 <td className="px-4 py-3"><span className="px-2 py-0.5 bg-slate-800 rounded text-xs font-mono">{pull.repo}</span></td>
                 <td className="px-4 py-3 text-xs text-slate-400 font-mono">{pull.source_branch} → {pull.target_branch}</td>
                 <td className="px-4 py-3">
-                  <div className="flex flex-wrap gap-1">
                     <StatusBadge status={pull.status} />
-                    {pull.is_approved && <span className="px-2 py-0.5 bg-green-500/10 text-green-400 border border-green-500/20 rounded-full text-xs">Approved</span>}
-                    {pull.target_branch_protected && <span className="px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full text-xs flex items-center gap-1"><Lock className="h-2.5 w-2.5" />Protected</span>}
-                  </div>
+                </td>
+                <td className="px-4 py-3">
+                  {pull.target_branch_protected && <span className="px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 rounded-full text-xs flex items-center gap-1"><Lock className="h-2.5 w-2.5" />Protected</span>}
                 </td>
                 <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{formatDate(pull.updated_at || pull.created_at)}</td>
                 <td className="px-4 py-3">

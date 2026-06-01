@@ -1,32 +1,78 @@
 import * as React from "react"
+import { cva } from "class-variance-authority";
 
-import { cn } from "../../lib/utils"
+import { cn } from "@/lib/utils";
 
-const alertVariants = {
-  default: "border-slate-800 bg-slate-900/70 text-slate-200",
-  info: "border-blue-500/30 bg-blue-500/10 text-blue-200",
-  warning: "border-amber-500/30 bg-amber-500/10 text-amber-200",
-  destructive: "border-red-500/30 bg-red-500/10 text-red-200",
+const alertVariants = cva(
+  "group/alert relative grid w-full gap-0.5 rounded-lg border px-2.5 py-2 text-left text-sm has-data-[slot=alert-action]:relative has-data-[slot=alert-action]:pr-18 has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-2 *:[svg]:row-span-2 *:[svg]:translate-y-0.5 *:[svg]:text-current *:[svg:not([class*='size-'])]:size-4",
+  {
+    variants: {
+      variant: {
+        default: "bg-card text-card-foreground",
+        destructive:
+          "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
+
+function Alert({
+  className,
+  variant,
+  ...props
+}) {
+  return (
+    <div
+      data-slot="alert"
+      role="alert"
+      className={cn(alertVariants({ variant }), className)}
+      {...props} />
+  );
 }
 
-const Alert = React.forwardRef(({ className, variant = "default", ...props }, ref) => (
-  <div
-    ref={ref}
-    role="alert"
-    className={cn("relative w-full rounded-lg border p-4", alertVariants[variant], className)}
-    {...props}
-  />
-))
-Alert.displayName = "Alert"
+function AlertTitle({
+  className,
+  ...props
+}) {
+  return (
+    <div
+      data-slot="alert-title"
+      className={cn(
+        "font-medium group-has-[>svg]/alert:col-start-2 [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground",
+        className
+      )}
+      {...props} />
+  );
+}
 
-const AlertTitle = React.forwardRef(({ className, ...props }, ref) => (
-  <h5 ref={ref} className={cn("mb-1 font-medium leading-none tracking-tight", className)} {...props} />
-))
-AlertTitle.displayName = "AlertTitle"
+function AlertDescription({
+  className,
+  ...props
+}) {
+  return (
+    <div
+      data-slot="alert-description"
+      className={cn(
+        "text-sm text-balance text-muted-foreground md:text-pretty [&_a]:underline [&_a]:underline-offset-3 [&_a]:hover:text-foreground [&_p:not(:last-child)]:mb-4",
+        className
+      )}
+      {...props} />
+  );
+}
 
-const AlertDescription = React.forwardRef(({ className, ...props }, ref) => (
-  <div ref={ref} className={cn("text-sm opacity-90 [&_p]:leading-relaxed", className)} {...props} />
-))
-AlertDescription.displayName = "AlertDescription"
+function AlertAction({
+  className,
+  ...props
+}) {
+  return (
+    <div
+      data-slot="alert-action"
+      className={cn("absolute top-2 right-2", className)}
+      {...props} />
+  );
+}
 
-export { Alert, AlertTitle, AlertDescription }
+export { Alert, AlertTitle, AlertDescription, AlertAction }
