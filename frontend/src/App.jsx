@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Fragment } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -83,6 +83,14 @@ export default function App() {
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [commitFiles, setCommitFiles] = useState([]);
   const [selectedCommit, setSelectedCommit] = useState(null);
+  const [expandedFiles, setExpandedFiles] = useState({});
+
+  const toggleFileExpand = (path) => {
+    setExpandedFiles(prev => ({
+      ...prev,
+      [path]: !prev[path]
+    }));
+  };
   const [issueRepoFilter, setIssueRepoFilter] = useState(null);
   const selectedRepoCapability = selectedRepo ? repoCapabilities[selectedRepo] : null;
   const selectedRepoRole = selectedRepoCapability?.current_user_role;
@@ -445,16 +453,30 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-background text-foreground dark">
+    <div className="flex h-screen bg-background text-foreground dark relative overflow-hidden">
+      {/* Ambient Space & Coordinate Grid Pattern */}
+      <div className="fixed inset-0 pointer-events-none opacity-25 z-0">
+        <div 
+          className="absolute inset-0" 
+          style={{
+            backgroundImage: `linear-gradient(rgba(168, 85, 247, 0.035) 1px, transparent 1px), 
+                              linear-gradient(90deg, rgba(168, 85, 247, 0.035) 1px, transparent 1px)`,
+            backgroundSize: '80px 80px'
+          }} 
+        />
+        <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-900/15 blur-[120px]" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-pink-900/15 blur-[120px]" />
+      </div>
+
       {/* Sidebar */}
-      <aside className="w-64 border-r bg-slate-950 flex flex-col">
+      <aside className="w-64 border-r border-purple-500/10 bg-slate-950/70 backdrop-blur-xl flex flex-col relative z-10">
         <div className="p-6 flex items-center space-x-3">
-          <div className="bg-primary p-2 rounded-lg text-primary-foreground">
+          <div className="bg-primary p-2 rounded-lg text-primary-foreground shadow-lg shadow-primary/20">
             <GitBranch className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="font-bold text-lg tracking-tight">GitMini</h1>
-            <p className="text-xs text-slate-500 font-medium">PostgreSQL Powered</p>
+            <h1 className="font-extrabold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300">GitMini</h1>
+            <p className="text-[10px] text-slate-500 font-bold tracking-widest uppercase">PG Powered</p>
           </div>
         </div>
 
@@ -464,28 +486,27 @@ export default function App() {
               key={item.key}
               onClick={() => setView(item.key)}
               className={cn(
-                "w-full flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-all",
+                "w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-all elastic-transition hover:scale-[1.03] active:scale-[0.97]",
                 selectedMenuKey === item.key
-                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                  : "text-slate-400 hover:text-slate-100 hover:bg-slate-900"
+                  ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25 border border-primary/20"
+                  : "text-slate-400 hover:text-slate-100 hover:bg-slate-900/40"
               )}
             >
               {item.icon}
               <span>{item.label}</span>
-              {selectedMenuKey === item.key}
             </button>
           ))}
         </nav>
 
         <div className="p-4 mt-auto">
-          <Card className="bg-slate-900 border-slate-800">
+          <Card className="bg-slate-950/40 border-purple-500/10 backdrop-blur-md">
             <CardHeader className="p-4 pb-2">
               <div className="flex items-center space-x-3">
-                <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold">
+                <div className="h-8 w-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold border border-purple-500/20 text-purple-300">
                   {me.username[0].toUpperCase()}
                 </div>
                 <div className="overflow-hidden">
-                  <p className="text-sm font-semibold truncate">{me.username}</p>
+                  <p className="text-sm font-semibold truncate text-slate-200">{me.username}</p>
                   <p className="text-[10px] uppercase text-slate-500 font-bold tracking-widest">{me.system_role || 'User'}</p>
                 </div>
               </div>
@@ -494,7 +515,7 @@ export default function App() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="w-full text-xs text-slate-400 hover:text-destructive"
+                className="w-full text-xs text-slate-400 hover:text-destructive elastic-transition"
                 onClick={handleLogout}
               >
                 <LogOut className="h-3 w-3 mr-2" />
@@ -506,9 +527,9 @@ export default function App() {
       </aside>
 
       {/* Main Workspace */}
-      <main className="flex-1 flex flex-col overflow-hidden">
+      <main className="flex-1 flex flex-col overflow-hidden relative z-10">
         {/* Header */}
-        <header className="h-16 border-b flex items-center justify-between px-8 bg-slate-950/50 backdrop-blur-md sticky top-0 z-10">
+        <header className="h-16 border-b border-purple-500/10 flex items-center justify-between px-8 bg-slate-950/40 backdrop-blur-xl sticky top-0 z-10">
           <div className="relative w-96 group">
             <Search
               className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 group-focus-within:text-primary cursor-pointer transition-colors"
@@ -519,13 +540,13 @@ export default function App() {
               placeholder="Search with PG Full-Text Search..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-900 border-slate-800 rounded-full pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+              className="w-full bg-slate-950/60 border-purple-500/10 rounded-full pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40 transition-all bg-slate-900"
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             />
           </div>
 
           <div className="flex items-center space-x-4">
-            <Button size="sm" onClick={() => setModal('repo')}>
+            <Button size="sm" onClick={() => setModal('repo')} className="elastic-transition hover:scale-[1.04] active:scale-[0.97]">
               <Plus className="h-4 w-4 mr-2" />
               New Repository
             </Button>
@@ -695,31 +716,62 @@ export default function App() {
         <AppDialog
           title={`Commit ${selectedCommit ? selectedCommit.substring(0, 7) : ''} — Changed Files`}
           open={modal === 'commit_files'}
-          onOpenChange={(open) => { if (!open) { setModal(null); setCommitFiles([]); setSelectedCommit(null); } }}
+          onOpenChange={(open) => { if (!open) { setModal(null); setCommitFiles([]); setSelectedCommit(null); setExpandedFiles({}); } }}
           width={700}
         >
           {commitFiles.length === 0
             ? <div className="text-center py-8 text-slate-500">No file changes recorded for this commit.</div>
             : (
-              <table className="w-full text-sm text-left">
+              <table className="w-full text-sm text-left table-fixed">
                 <thead className="border-b border-slate-700 text-slate-500">
                   <tr>
-                    <th className="py-2 pr-4">File</th>
-                    <th className="py-2 pr-4">Change</th>
-                    <th className="py-2 pr-4">Size</th>
-                    <th className="py-2">Content</th>
+                    <th className="py-2 pr-4 w-[30%]">File</th>
+                    <th className="py-2 pr-4 w-[15%]">Change</th>
+                    <th className="py-2 pr-4 w-[15%]">Size</th>
+                    <th className="py-2 w-[40%]">Content</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
                   {commitFiles.map((f) => (
-                    <tr key={f.file_path}>
-                      <td className="py-2 pr-4 font-mono text-xs text-primary">{f.file_path}</td>
-                      <td className="py-2 pr-4">
-                        <span className={cn('px-2 py-0.5 rounded text-xs font-medium', f.change_type === 'added' ? 'bg-green-500/10 text-green-400' : f.change_type === 'deleted' ? 'bg-red-500/10 text-red-400' : 'bg-blue-500/10 text-blue-400')}>{f.change_type}</span>
-                      </td>
-                      <td className="py-2 pr-4 text-slate-400">{f.size_bytes != null ? `${f.size_bytes} B` : '—'}</td>
-                      <td className="py-2 font-mono text-xs text-slate-400 max-w-[200px] truncate">{f.content ? f.content.substring(0, 120) : '—'}</td>
-                    </tr>
+                    <Fragment key={f.file_path}>
+                      <tr>
+                        <td className="py-2 pr-4 font-mono text-xs text-primary truncate" title={f.file_path}>{f.file_path}</td>
+                        <td className="py-2 pr-4">
+                          <span className={cn('px-2 py-0.5 rounded text-xs font-medium', f.change_type === 'added' ? 'bg-green-500/10 text-green-400' : f.change_type === 'deleted' ? 'bg-red-500/10 text-red-400' : 'bg-blue-500/10 text-blue-400')}>{f.change_type}</span>
+                        </td>
+                        <td className="py-2 pr-4 text-slate-400">{f.size_bytes != null ? `${f.size_bytes} B` : '—'}</td>
+                        <td className="py-2">
+                          <div 
+                            onClick={() => toggleFileExpand(f.file_path)}
+                            className="font-mono text-xs text-slate-400 truncate cursor-pointer hover:text-primary transition-colors flex items-center justify-between gap-1.5 group"
+                            title="Click to view full content"
+                          >
+                            <span className="truncate flex-grow">{f.content || '—'}</span>
+                            {f.content && (
+                              <span className="text-[10px] bg-primary/10 text-primary border border-primary/20 px-1 rounded transition-colors whitespace-nowrap scale-95 group-hover:scale-100 transform duration-150 select-none">
+                                {expandedFiles[f.file_path] ? 'Thu gọn' : 'Xem'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {expandedFiles[f.file_path] && f.content && (
+                        <tr className="bg-slate-950/40">
+                          <td colSpan={4} className="py-3 px-4">
+                            <div className="relative rounded-lg border border-slate-800 bg-slate-900/60 p-3 overflow-x-auto max-h-60 overflow-y-auto">
+                              <div className="absolute top-2 right-2 flex gap-2">
+                                <span className="text-[10px] text-slate-500 select-none">
+                                  {f.size_bytes != null ? `${f.size_bytes} Bytes` : ''}
+                                </span>
+                              </div>
+                              <pre className="font-mono text-xs text-slate-300 whitespace-pre-wrap break-all leading-relaxed pt-2">
+                                {f.content}
+                              </pre>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>

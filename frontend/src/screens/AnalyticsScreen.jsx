@@ -1,15 +1,14 @@
 import { Book, GitCommit, AlertCircle, GitPullRequest } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '../components/ui/chart';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, LabelList } from 'recharts';
 
 const repoChartConfig = {
-  commit_count: { label: 'Commits', color: 'var(--chart-1)' },
+  commit_count: { label: 'Commits', color: 'hsl(var(--primary))' },
   label: { color: 'var(--background)' },
 };
 
 const contributorChartConfig = {
-  commit_count: { label: 'Commits', color: 'var(--chart-2)' },
+  commit_count: { label: 'Commits', color: 'hsl(280, 80%, 65%)' },
   label: { color: 'var(--background)' },
 };
 
@@ -35,111 +34,115 @@ export function AnalyticsScreen({ data }) {
   }));
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 max-w-6xl mx-auto animate-slide-up relative z-10">
       <div className="space-y-1">
-        <h2 className="text-3xl font-bold tracking-tight">System Analytics</h2>
-        <p className="text-slate-400">High-level overview of workspace health and activity.</p>
+        <h2 className="text-4xl font-extrabold tracking-tight text-gradient">System Analytics</h2>
+        <p className="text-slate-400 text-sm">High-level overview of workspace health and activity.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <Card key={stat.label} className="bg-slate-900/40 border-slate-800">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
-              <CardTitle className="text-sm font-medium text-slate-400">{stat.label}</CardTitle>
-              <stat.icon className="h-4 w-4 text-slate-500" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stat.value}</div>
-              <p className="text-[10px] text-slate-600 font-bold uppercase mt-1">Live from PostgreSQL</p>
-            </CardContent>
-          </Card>
+        {stats.map((stat, i) => (
+          <div 
+            key={stat.label} 
+            className="glass-card glass-card-hover elastic-transition p-6 flex flex-col justify-between h-32"
+            style={{ animationDelay: `${i * 35}ms` }}
+          >
+            <div className="flex flex-row items-center justify-between pb-2">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{stat.label}</span>
+              <stat.icon className="h-4 w-4 text-purple-400/80" />
+            </div>
+            <div className="mt-auto">
+              <div className="text-3xl font-black text-slate-100 tracking-tight">{stat.value}</div>
+              <p className="text-[9px] text-slate-500 font-bold uppercase mt-1 tracking-wider">Live from PostgreSQL</p>
+            </div>
+          </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Repositories */}
-        <Card className="bg-slate-900/40 border-slate-800">
-          <CardHeader>
-            <CardTitle className="text-lg">Top Repositories</CardTitle>
-            <CardDescription>Most active projects by commit volume.</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <div className="glass-card border border-purple-500/10 p-6 flex flex-col gap-4">
+          <div>
+            <h3 className="text-lg font-bold text-slate-200">Top Repositories</h3>
+            <p className="text-xs text-slate-400 mt-1">Most active projects by commit volume.</p>
+          </div>
+          <div>
             <ChartContainer config={repoChartConfig}>
               <BarChart
                 data={topRepos}
                 layout="vertical"
                 margin={{ right: 48, left: 8 }}
               >
-                <CartesianGrid horizontal={false} />
+                <CartesianGrid horizontal={false} stroke="rgba(168, 85, 247, 0.05)" />
                 <YAxis dataKey="name" type="category" tickLine={false} axisLine={false} hide />
                 <XAxis dataKey="commit_count" type="number" hide />
                 <ChartTooltip
                   cursor={false}
                   content={<ChartTooltipContent indicator="line" />}
                 />
-                <Bar dataKey="commit_count" fill="var(--color-commit_count)" radius={4}>
+                <Bar dataKey="commit_count" fill="hsl(var(--primary))" radius={6}>
                   <LabelList
                     dataKey="name"
                     position="insideLeft"
                     offset={8}
-                    style={{ fill: 'white' }}
-                    fontSize={12}
+                    style={{ fill: 'white', fontWeight: 600 }}
+                    fontSize={11}
                   />
                   <LabelList
                     dataKey="commit_count"
                     position="right"
                     offset={8}
-                    style={{ fill: 'currentColor' }}
-                    fontSize={12}
+                    style={{ fill: '#d8b4fe', fontWeight: 700 }}
+                    fontSize={11}
                     formatter={(v) => `${v} commits`}
                   />
                 </Bar>
               </BarChart>
             </ChartContainer>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
         {/* Top Contributors */}
-        <Card className="bg-slate-900/40 border-slate-800">
-          <CardHeader>
-            <CardTitle className="text-lg">Top Contributors</CardTitle>
-            <CardDescription>Power users across the workspace.</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <div className="glass-card border border-purple-500/10 p-6 flex flex-col gap-4">
+          <div>
+            <h3 className="text-lg font-bold text-slate-200">Top Contributors</h3>
+            <p className="text-xs text-slate-400 mt-1">Power users across the workspace.</p>
+          </div>
+          <div>
             <ChartContainer config={contributorChartConfig}>
               <BarChart
                 data={topContributors}
                 layout="vertical"
                 margin={{ right: 48, left: 8 }}
               >
-                <CartesianGrid horizontal={false} />
+                <CartesianGrid horizontal={false} stroke="rgba(168, 85, 247, 0.05)" />
                 <YAxis dataKey="name" type="category" tickLine={false} axisLine={false} hide />
                 <XAxis dataKey="commit_count" type="number" hide />
                 <ChartTooltip
                   cursor={false}
                   content={<ChartTooltipContent indicator="line" />}
                 />
-                <Bar dataKey="commit_count" fill="var(--color-commit_count)" radius={4}>
+                <Bar dataKey="commit_count" fill="hsl(280, 80%, 65%)" radius={6}>
                   <LabelList
                     dataKey="name"
                     position="insideLeft"
                     offset={8}
-                    style={{ fill: 'white' }}
-                    fontSize={12}
+                    style={{ fill: 'white', fontWeight: 600 }}
+                    fontSize={11}
                   />
                   <LabelList
                     dataKey="commit_count"
                     position="right"
                     offset={8}
-                    style={{ fill: 'currentColor' }}
-                    fontSize={12}
+                    style={{ fill: '#f472b6', fontWeight: 700 }}
+                    fontSize={11}
                     formatter={(v) => `${v} commits`}
                   />
                 </Bar>
               </BarChart>
             </ChartContainer>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   );

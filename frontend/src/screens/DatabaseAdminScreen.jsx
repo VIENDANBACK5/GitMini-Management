@@ -1,87 +1,123 @@
-import { Clock } from 'lucide-react';
+import { Clock, Database, HardDrive, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 
 export function DatabaseAdminScreen({ data, load }) {
-  // Fix: data returned from backend is directly the status dictionary which includes partitions
   const replication = data || {};
   const partitions = data?.partitions || [];
   const isReplicaActive = replication.state === 'streaming';
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto">
+    <div className="space-y-8 max-w-6xl mx-auto animate-slide-up relative z-10">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="space-y-1">
-          <h2 className="text-3xl font-bold tracking-tight text-white">Database Administration</h2>
-          <p className="text-slate-400">Real-time monitoring of Streaming Replication & Table Partitioning.</p>
+          <h2 className="text-4xl font-extrabold tracking-tight text-gradient">
+            Database Administration
+          </h2>
+          <p className="text-slate-400 text-sm">Real-time monitoring of Streaming Replication & Table Partitioning.</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => load('db-admin')} className="bg-slate-900 border-slate-800">
-          <Clock className="h-4 w-4 mr-2" />
+        <Button 
+          onClick={() => load('db-admin')} 
+          className="bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 backdrop-blur-md rounded-xl transition-all duration-300 hover:scale-[1.04] active:scale-[0.97]"
+        >
+          <RefreshCw className="h-4 w-4 mr-2 animate-spin-slow" />
           Refresh Metrics
         </Button>
       </div>
 
-      {/* Replication Stats */}
+      {/* Replication Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="bg-slate-900/40 border-slate-800">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Replica Status</CardDescription>
-            <CardTitle className="flex items-center">
-              {isReplicaActive ? (
-                <span className="text-green-500 flex items-center"><div className="h-2 w-2 bg-green-500 rounded-full mr-2 animate-pulse" />Streaming</span>
-              ) : (
-                <span className="text-red-500 flex items-center"><div className="h-2 w-2 bg-red-500 rounded-full mr-2" />Disconnected</span>
-              )}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        <Card className="bg-slate-900/40 border-slate-800">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Sync State</CardDescription>
-            <CardTitle>{replication.sync_state?.toUpperCase() || 'N/A'}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card className="bg-slate-900/40 border-slate-800">
-          <CardHeader className="pb-2">
-            <CardDescription className="text-[10px] uppercase font-bold tracking-wider text-slate-500">WAL Lag</CardDescription>
-            <CardTitle className={replication.lag && replication.lag !== '0 bytes' ? "text-yellow-500" : "text-primary"}>
-              {replication.lag || '0 bytes'}
-            </CardTitle>
-          </CardHeader>
-        </Card>
+        {/* Status Card */}
+        <div className="glass-card glass-card-hover elastic-transition p-6 flex flex-col justify-between h-36">
+          <div className="text-[10px] uppercase font-black tracking-widest text-slate-500">Replica Status</div>
+          <div className="text-2xl font-black tracking-tight mt-auto">
+            {isReplicaActive ? (
+              <span className="text-emerald-400 flex items-center gap-2">
+                <span className="relative flex h-3.5 w-3.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 pulse-badge-green"></span>
+                </span>
+                Streaming
+              </span>
+            ) : (
+              <span className="text-rose-500 flex items-center gap-2">
+                <span className="h-3.5 w-3.5 rounded-full bg-rose-500 pulse-badge-red"></span>
+                Disconnected
+              </span>
+            )}
+          </div>
+          <div className="text-xs text-slate-500 mt-1 font-mono">Read-Write Splitting Active</div>
+        </div>
+
+        {/* Sync State Card */}
+        <div className="glass-card glass-card-hover elastic-transition p-6 flex flex-col justify-between h-36">
+          <div className="text-[10px] uppercase font-black tracking-widest text-slate-500">Sync State</div>
+          <div className="text-2xl font-black text-purple-300 tracking-tight mt-auto">
+            {replication.sync_state?.toUpperCase() || 'OFFLINE'}
+          </div>
+          <div className="text-xs text-slate-500 mt-1 font-mono">Streaming Protocol: WAL</div>
+        </div>
+
+        {/* WAL Lag Card */}
+        <div className="glass-card glass-card-hover elastic-transition p-6 flex flex-col justify-between h-36">
+          <div className="text-[10px] uppercase font-black tracking-widest text-slate-500">WAL Lag</div>
+          <div className={`text-2xl font-black tracking-tight mt-auto ${replication.lag && replication.lag !== '0 bytes' ? "text-amber-400 drop-shadow-[0_0_10px_rgba(245,158,11,0.3)]" : "text-emerald-400"}`}>
+            {replication.lag || '0 bytes'}
+          </div>
+          <div className="text-xs text-slate-500 mt-1 font-mono">Replica Synchronization Lag</div>
+        </div>
       </div>
 
       {/* Partitions Table */}
-      <Card className="bg-slate-900/40 border-slate-800 overflow-hidden">
-        <CardHeader className="bborder-b">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg font-bold">Commit Table Partitions</CardTitle>
+      <div className="glass-card overflow-hidden border border-purple-500/10">
+        <div className="p-6 border-b border-purple-500/10 bg-purple-950/20 flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-slate-200 flex items-center gap-2">
+              <HardDrive className="h-5 w-5 text-purple-400" />
+              Commit Table Partitions
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">Automatic time-range based vertical partitioning in PostgreSQL.</p>
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
+          <Badge className="bg-purple-500/10 text-purple-300 border border-purple-500/20">Optimal Performance</Badge>
+        </div>
+        <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="bg-slate-900/40 text-slate-500 border-b border-slate-800">
+            <thead className="bg-purple-950/10 text-slate-400 border-b border-purple-500/10">
               <tr>
-                <th className="px-6 py-3 text-left">Partition Name</th>
-                <th className="px-6 py-3 text-left">Rows</th>
-                <th className="px-6 py-3 text-left">Disk Size</th>
-                <th className="px-6 py-3 text-left">Status</th>
+                <th className="px-6 py-4 text-left font-black tracking-wider text-[11px] uppercase">Partition Name</th>
+                <th className="px-6 py-4 text-left font-black tracking-wider text-[11px] uppercase">Row Count</th>
+                <th className="px-6 py-4 text-left font-black tracking-wider text-[11px] uppercase">Disk Size</th>
+                <th className="px-6 py-4 text-left font-black tracking-wider text-[11px] uppercase">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
-              {partitions.map((p) => (
-                <tr key={p.name || p.partition_name} className="hover:bg-slate-800/30 transition-colors">
-                  <td className="px-6 py-4 font-mono text-primary font-medium">{p.name || p.partition_name}</td>
-                  <td className="px-6 py-4">{p.rows || p.row_count}</td>
-                  <td className="px-6 py-4">{p.size}</td>
-                  <td className="px-6 py-4"><Badge className="bg-green-500/10 text-green-500 border-none">Optimal</Badge></td>
+            <tbody className="divide-y divide-purple-500/10">
+              {partitions.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-6 py-10 text-center text-slate-500">
+                    No active partitions found.
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                partitions.map((p, idx) => (
+                  <tr key={p.name || p.partition_name} className="hover:bg-purple-500/5 transition-colors">
+                    <td className="px-6 py-4 font-mono text-purple-300 font-semibold">{p.name || p.partition_name}</td>
+                    <td className="px-6 py-4 text-slate-300 font-medium">{p.rows || p.row_count}</td>
+                    <td className="px-6 py-4 text-slate-300 font-medium">{p.size}</td>
+                    <td className="px-6 py-4">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                        Active Indexing
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
+
