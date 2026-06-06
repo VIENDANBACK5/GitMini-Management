@@ -1,3 +1,6 @@
+import hashlib
+import os
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
@@ -10,9 +13,9 @@ from psycopg2 import errors
 from psycopg2.extras import Json
 
 from app import queries
-from app.auth import SESSION_COOKIE_NAME, SESSION_TTL_SECONDS, create_session, delete_session, require_user, verify_credentials
-from app.db import close_pool, execute_one, fetch_all, fetch_one, init_pool
-from app.schemas import IssueCreate, IssueUpdate, LoginRequest, PullRequestCreate, PullRequestReviewCreate, PullRequestUpdate, RepoCreate, RepoMemberCreate, RepoMemberUpdate
+from app.auth import SESSION_COOKIE_NAME, SESSION_TTL_SECONDS, create_session, delete_session, init_sessions_table, require_user, verify_credentials
+from app.db import close_pool, execute_one, fetch_all, fetch_one, init_pool, get_connection
+from app.schemas import BranchCreate, CommitCreate, IssueCreate, IssueUpdate, LoginRequest, PullRequestCreate, PullRequestReviewCreate, PullRequestUpdate, RepoCreate, RepoMemberCreate, RepoMemberUpdate, RepoUpdate
 
 FRONTEND_DIR = Path("/app/frontend")
 CurrentUser = Annotated[str, Depends(require_user)]
@@ -25,6 +28,7 @@ UPDATE_ROLES = {"owner", "maintainer"}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_pool()
+    init_sessions_table()
     yield
     close_pool()
 
@@ -37,6 +41,12 @@ def clamp_limit(limit: int, maximum: int = 200) -> int:
 
 
 def get_or_create_user(username: str) -> str:
+    # Thử tìm ở Slave trước (Read-only)
+    row = fetch_one("SELECT id FROM users WHERE username = %s", (username,))
+    if row:
+        return row["id"]
+    
+    # Nếu không có mới ghi vào Master
     row = execute_one(
         """
         INSERT INTO users (username, email, password_hash, full_name)
@@ -65,6 +75,7 @@ def require_repo_access(repo_name: str, ctx: dict) -> dict:
             r.name,
             r.owner_id,
             r.is_private,
+            r.default_branch,
             rm.role AS member_role,
             CASE
                 WHEN %s = 'admin' THEN 'admin'
@@ -104,6 +115,12 @@ def require_admin(ctx: dict) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
 
+def require_admin_or_owner(repo: dict, ctx: dict) -> None:
+    if ctx["is_admin"] or repo["owner_id"] == ctx["id"]:
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin or owner access required")
+
+
 def log_audit(ctx: dict, repo_id: str | None, action: str, target_type: str, target_id: str | None, metadata: dict | None = None) -> None:
     execute_one(
         """
@@ -137,7 +154,7 @@ def require_issue_update(issue_id: str, ctx: dict) -> dict:
     if not issue:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Issue not found")
     role = "admin" if ctx["is_admin"] else "owner" if issue["owner_id"] == ctx["id"] else issue["member_role"]
-    if role in {"admin", "owner", "maintainer"} or issue["author_id"] == ctx["id"]:
+    if role in {"admin", "owner", "maintainer", "developer", "reviewer"} or issue["author_id"] == ctx["id"]:
         return issue
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to update this issue")
 
@@ -182,7 +199,7 @@ def require_pull_update(pull_id: str, target_status: str, ctx: dict) -> dict:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only open pull requests can be merged")
         if pull["target_branch_protected"] and pull["approval_count"] < 1:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Protected branch requires at least one reviewer approval before merge")
-    if target_status == "closed" and role not in {"admin", "owner", "maintainer"} and pull["author_id"] != ctx["id"]:
+    if target_status == "closed" and role not in {"admin", "owner", "maintainer", "developer"} and pull["author_id"] != ctx["id"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to close this pull request")
     return pull
 
@@ -327,8 +344,8 @@ def get_repo_stats(repo_name: str, current_user: CurrentUser):
 def list_repo_members(repo_name: str, current_user: CurrentUser):
     ctx = current_context(current_user)
     repo = require_repo_access(repo_name, ctx)
-    if repo["current_user_role"] not in {"admin", "owner", "maintainer"}:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admin, owner or maintainer can view members")
+    if repo["current_user_role"] not in {"admin", "owner", "maintainer", "developer", "reviewer"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only repo members can view the member list")
     return fetch_all(
         """
         SELECT u.username, u.full_name, rm.role, rm.joined_at
@@ -444,21 +461,187 @@ def remove_repo_member(repo_name: str, username: str, current_user: CurrentUser)
     return {"status": "removed", "username": username}
 
 
+@app.delete("/repos/{repo_name}")
+def delete_repo(repo_name: str, current_user: CurrentUser):
+    ctx = current_context(current_user)
+    repo = require_repo_access(repo_name, ctx)
+    require_admin_or_owner(repo, ctx)
+    
+    execute_one("DELETE FROM repositories WHERE id = %s RETURNING id", (repo["id"],))
+    log_audit(
+        ctx,
+        None,
+        "repo.delete",
+        "repository",
+        repo["id"],
+        {"name": repo["name"], "repo": repo_name}
+    )
+    return {"status": "deleted", "name": repo_name}
+
+
+@app.get("/repos/{repo_name}/branches")
+def list_repo_branches(repo_name: str, current_user: CurrentUser):
+    ctx = current_context(current_user)
+    repo = require_repo_access(repo_name, ctx)
+    return fetch_all(
+        "SELECT id, name, head_commit_hash, is_protected, created_at, updated_at FROM branches WHERE repo_id = %s ORDER BY is_protected DESC, name",
+        (repo["id"],),
+    )
+
+
+@app.post("/repos/{repo_name}/branches", status_code=status.HTTP_201_CREATED)
+def create_branch(repo_name: str, payload: BranchCreate, current_user: CurrentUser):
+    ctx = current_context(current_user)
+    repo = require_repo_access(repo_name, ctx)
+    require_role(repo, WRITE_PULL_ROLES)
+    start_commit = payload.from_commit
+    if not start_commit:
+        head = fetch_one(
+            "SELECT b.head_commit_hash FROM branches b JOIN repositories r ON r.id = b.repo_id WHERE b.repo_id = %s AND b.name = r.default_branch",
+            (repo["id"],),
+        )
+        start_commit = head["head_commit_hash"] if head else None
+    try:
+        branch = execute_one(
+            "INSERT INTO branches (repo_id, name, head_commit_hash, is_protected) VALUES (%s, %s, %s, %s) RETURNING id, name, head_commit_hash, is_protected, created_at",
+            (repo["id"], payload.name, start_commit, payload.is_protected),
+        )
+    except errors.UniqueViolation as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Branch '{payload.name}' already exists") from exc
+    log_audit(ctx, repo["id"], "branch.create", "branch", branch["id"], {"name": payload.name, "repo": repo_name})
+    return branch
+
+
+@app.patch("/repos/{repo_name}")
+def update_repo(repo_name: str, payload: RepoUpdate, current_user: CurrentUser):
+    ctx = current_context(current_user)
+    repo = require_repo_access(repo_name, ctx)
+    require_owner_or_admin(repo)
+    updated = execute_one(
+        "UPDATE repositories SET description = %s, is_private = %s, updated_at = NOW() WHERE id = %s RETURNING id, name, description, is_private, updated_at",
+        (payload.description, payload.is_private, repo["id"]),
+    )
+    log_audit(ctx, repo["id"], "repo.update", "repository", repo["id"], {"name": repo_name})
+    return updated
+
+
+@app.get("/repos/{repo_name}/commits/{commit_hash}/files")
+def get_commit_files(repo_name: str, commit_hash: str, current_user: CurrentUser):
+    ctx = current_context(current_user)
+    require_repo_access(repo_name, ctx)
+    return fetch_all(
+        """
+        SELECT cf.file_path, cf.change_type, fb.content, fb.size_bytes
+        FROM commit_files cf
+        LEFT JOIN file_blobs fb ON fb.id = cf.blob_id
+        WHERE cf.commit_hash = %s
+        ORDER BY cf.file_path
+        """,
+        (commit_hash,),
+    )
+
+
+@app.delete("/repos/{repo_name}/branches/{branch_name:path}")
+def delete_branch(repo_name: str, branch_name: str, current_user: CurrentUser):
+    ctx = current_context(current_user)
+    repo = require_repo_access(repo_name, ctx)
+    require_role(repo, UPDATE_ROLES)
+    if branch_name == repo["default_branch"]:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete the default branch")
+    branch = fetch_one("SELECT id FROM branches WHERE repo_id = %s AND name = %s", (repo["id"], branch_name))
+    if not branch:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Branch not found")
+    open_prs = fetch_one(
+        "SELECT COUNT(*) AS cnt FROM pull_requests WHERE repo_id = %s AND (source_branch = %s OR target_branch = %s) AND status = 'open'",
+        (repo["id"], branch_name, branch_name),
+    )
+    if open_prs and open_prs["cnt"] > 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete a branch with open pull requests")
+    execute_one("DELETE FROM branches WHERE id = %s", (branch["id"],))
+    log_audit(ctx, repo["id"], "branch.delete", "branch", branch["id"], {"name": branch_name, "repo": repo_name})
+    return {"status": "deleted", "name": branch_name}
+
+
 @app.get("/repos/{repo_name}/history")
 def get_repo_history(
     repo_name: str,
     current_user: CurrentUser,
     limit: int = Query(default=50, ge=1, le=200),
     depth: int = Query(default=100, ge=1, le=500),
+    branch: str | None = Query(default=None),
 ):
     ctx = current_context(current_user)
     require_repo_access(repo_name, ctx)
     limited = clamp_limit(limit)
-    rows = fetch_all(queries.COMMIT_HISTORY, (ctx["id"], repo_name, ctx["username"], ctx["id"], depth, limited))
+    rows = fetch_all(queries.COMMIT_HISTORY, (ctx["id"], repo_name, ctx["username"], ctx["id"], branch, depth, limited))
     if len(rows) <= 1:
         fallback = fetch_all(queries.COMMIT_HISTORY_FALLBACK, (ctx["id"], repo_name, ctx["username"], ctx["id"], limited))
         return fallback or rows
     return rows
+
+
+@app.post("/repos/{repo_name}/commits", status_code=status.HTTP_201_CREATED)
+def create_commit(repo_name: str, payload: CommitCreate, current_user: CurrentUser):
+    ctx = current_context(current_user)
+    repo = require_repo_access(repo_name, ctx)
+    require_role(repo, WRITE_PULL_ROLES) # Developer+ role
+
+    branch = fetch_one(
+        "SELECT head_commit_hash FROM branches WHERE repo_id = %s AND name = %s",
+        (repo["id"], payload.branch)
+    )
+    if not branch:
+        raise HTTPException(status_code=404, detail=f"Branch '{payload.branch}' not found")
+
+    parent_hash = branch["head_commit_hash"]
+    
+    # Generate commit hash (simulated)
+    raw_content = f"{repo['id']}:{payload.branch}:{payload.message}:{parent_hash}:{uuid.uuid4()}"
+    new_hash = hashlib.sha1(raw_content.encode()).hexdigest()
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # 1. Insert commit
+            cur.execute(
+                "INSERT INTO commits (commit_hash, repo_id, author_id, message) VALUES (%s, %s, %s, %s)",
+                (new_hash, repo["id"], ctx["id"], payload.message),
+            )
+            # 2. Link parent in DAG
+            if parent_hash:
+                cur.execute(
+                    "INSERT INTO commit_parents (commit_hash, parent_hash, ordinal) VALUES (%s, %s, 0)",
+                    (new_hash, parent_hash),
+                )
+            # 3. Store file blobs (skip blob for deleted files)
+            for f in payload.files:
+                blob_id = None
+                if f.change_type != "deleted":
+                    blob_hash = hashlib.sha1(f.content.encode()).hexdigest()
+                    cur.execute(
+                        "INSERT INTO file_blobs (blob_hash, content, size_bytes) VALUES (%s, %s, %s) ON CONFLICT (blob_hash) DO NOTHING RETURNING id",
+                        (blob_hash, f.content, len(f.content)),
+                    )
+                    row = cur.fetchone()
+                    if not row:
+                        cur.execute("SELECT id FROM file_blobs WHERE blob_hash = %s", (blob_hash,))
+                        row = cur.fetchone()
+                    blob_id = row[0] if row else None
+                cur.execute(
+                    "INSERT INTO commit_files (commit_hash, file_path, blob_id, change_type) VALUES (%s, %s, %s, %s)",
+                    (new_hash, f.path, blob_id, f.change_type),
+                )
+            # 4. Advance branch HEAD
+            cur.execute(
+                "UPDATE branches SET head_commit_hash = %s, updated_at = NOW() WHERE repo_id = %s AND name = %s",
+                (new_hash, repo["id"], payload.branch),
+            )
+            # 5. Audit log in same transaction
+            cur.execute(
+                "INSERT INTO audit_logs (actor_id, repo_id, action, target_type, target_id, metadata) VALUES (%s, %s, %s, %s, %s, %s)",
+                (ctx["id"], repo["id"], "commit.create", "commit", new_hash, Json({"message": payload.message, "branch": payload.branch})),
+            )
+
+    return {"status": "ok", "commit_hash": new_hash}
 
 
 @app.get("/issues")
@@ -488,14 +671,17 @@ def create_issue(repo_name: str, payload: IssueCreate, current_user: CurrentUser
     ctx = current_context(current_user)
     repo = require_repo_access(repo_name, ctx)
     require_role(repo, WRITE_ISSUE_ROLES)
-    return execute_one(
-        """
-        INSERT INTO issues (repo_id, author_id, title, body, labels)
-        VALUES (%s, %s, %s, %s, %s)
-        RETURNING id, title, body, status, labels, created_at, updated_at, closed_at
-        """,
-        (repo["id"], ctx["id"], payload.title, payload.body, payload.labels),
-    )
+    try:
+        return execute_one(
+            """
+            INSERT INTO issues (repo_id, author_id, title, body, labels)
+            VALUES (%s, %s, %s, %s, %s)
+            RETURNING id, title, body, status, labels, created_at, updated_at, closed_at
+            """,
+            (repo["id"], ctx["id"], payload.title, payload.body, payload.labels),
+        )
+    except psycopg2.Error as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc).strip()) from exc
 
 
 @app.patch("/issues/{issue_id}")
@@ -575,14 +761,17 @@ def create_pull(repo_name: str, payload: PullRequestCreate, current_user: Curren
     ctx = current_context(current_user)
     repo = require_repo_access(repo_name, ctx)
     require_role(repo, WRITE_PULL_ROLES)
-    return execute_one(
-        """
-        INSERT INTO pull_requests (repo_id, author_id, title, body, source_branch, target_branch)
-        VALUES (%s, %s, %s, %s, %s, %s)
-        RETURNING id, title, body, status, source_branch, target_branch, created_at, updated_at
-        """,
-        (repo["id"], ctx["id"], payload.title, payload.body, payload.source_branch, payload.target_branch),
-    )
+    try:
+        return execute_one(
+            """
+            INSERT INTO pull_requests (repo_id, author_id, title, body, source_branch, target_branch)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id, title, body, status, source_branch, target_branch, created_at, updated_at
+            """,
+            (repo["id"], ctx["id"], payload.title, payload.body, payload.source_branch, payload.target_branch),
+        )
+    except psycopg2.Error as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc).strip()) from exc
 
 
 @app.post("/pulls/{pull_id}/reviews", status_code=status.HTTP_201_CREATED)
@@ -678,7 +867,7 @@ def search_global(
     limit: int = Query(default=50, ge=1, le=100),
 ):
     ctx = current_context(current_user)
-    return fetch_all(queries.GLOBAL_SEARCH, (ctx["id"], ctx["username"], ctx["id"], q, q, q, q, clamp_limit(limit, 100)))
+    return fetch_all(queries.GLOBAL_SEARCH, (ctx["id"], ctx["username"], ctx["id"], q, q, q, q, q, q, q, q, q, clamp_limit(limit, 100)))
 
 
 @app.get("/analytics")
@@ -749,3 +938,31 @@ def index():
 assets_dir = FRONTEND_DIR / "assets"
 if assets_dir.exists():
     app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+@app.get("/admin/db-status")
+def get_db_status(user: CurrentUser):
+    # Chỉ user 'admin' mới xem được (theo logic của dự án)
+    if user != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # 1. Lấy trạng thái Replication
+    from app.db import replica_status
+    status = replica_status()
+    
+    # 2. Lấy thống kê Partition
+    partitions = fetch_all("""
+        SELECT
+            inhrelid::regclass::text AS name,
+            pg_size_pretty(pg_total_relation_size(inhrelid)) AS size,
+            (SELECT count(*) FROM commits_partitioned WHERE tableoid = inhrelid) AS rows
+        FROM pg_inherits
+        WHERE inhparent = 'commits_partitioned'::regclass
+        ORDER BY name;
+    """)
+    status["partitions"] = partitions
+    
+    # 3. Lấy thông tin Master/Slave URLs (che bớt password)
+    status["primary_host"] = os.getenv("DATABASE_URL", "").split("@")[-1]
+    status["replica_host"] = os.getenv("DATABASE_REPLICA_URL", "").split("@")[-1]
+    
+    return status

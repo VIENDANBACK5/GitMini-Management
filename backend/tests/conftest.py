@@ -4,11 +4,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import db
-from app.auth import SESSIONS
 from app.main import app
 
 TEST_TABLES = """
 TRUNCATE
+  user_sessions,
   audit_logs,
   pull_request_reviews,
   pull_requests,
@@ -35,12 +35,10 @@ def client():
     if not os.getenv("DATABASE_URL"):
         pytest.fail("DATABASE_URL must point to a temporary PostgreSQL test database")
 
-    SESSIONS.clear()
     with TestClient(app) as test_client:
         clear_tables()
         yield test_client
         clear_tables()
-    SESSIONS.clear()
 
 
 @pytest.fixture

@@ -25,9 +25,9 @@ Tên cột
 	Mô tả
 	Ràng buộc
 	id
-	SERIAL
-	Khóa chính tự tăng
-	PRIMARY KEY
+	UUID
+	Khóa chính (v4)
+	PRIMARY KEY, DEFAULT uuid_generate_v4()
 	username
 	VARCHAR(50)
 	Tên đăng nhập, định danh người dùng trong hệ thống
@@ -94,9 +94,9 @@ Tên cột
 	Mô tả
 	Ràng buộc
 	id
-	SERIAL
-	Khóa chính tự tăng, định danh duy nhất cho mỗi repository
-	PRIMARY KEY
+	UUID
+	Khóa chính (v4)
+	PRIMARY KEY, DEFAULT uuid_generate_v4()
 	name
 	VARCHAR(100)
 	Tên repository (vd: gitmini-core, my-website)
@@ -106,7 +106,7 @@ Tên cột
 	Mô tả tóm tắt nội dung và mục đích của repository
 	DEFAULT ''
 	owner_id
-	INT
+	UUID
 	Tham chiếu đến chủ sở hữu trong bảng users
 	NOT NULL, FK → users(id) ON DELETE CASCADE
 	is_private
@@ -175,13 +175,13 @@ Tên cột
 	Mã định danh SHA-1 duy nhất toàn cầu của commit (40 ký tự hex)
 	PRIMARY KEY
 	repo_id
-	INT
+	UUID
 	Repository chứa commit này
 	NOT NULL, FK → repositories(id) ON DELETE CASCADE
 	author_id
-	INT
+	UUID
 	Người thực hiện commit (tác giả)
-	NOT NULL, FK → users(id) ON DELETE SET NULL
+	FK → users(id) ON DELETE SET NULL
 	message
 	TEXT
 	Nội dung mô tả mục đích và thay đổi của commit
@@ -270,11 +270,11 @@ Tên cột
 	Mô tả
 	Ràng buộc
 	id
-	SERIAL
-	Khóa chính tự tăng
-	PRIMARY KEY
+	UUID
+	Khóa chính (v4)
+	PRIMARY KEY, DEFAULT uuid_generate_v4()
 	repo_id
-	INT
+	UUID
 	Repository chứa nhánh này
 	NOT NULL, FK → repositories(id) ON DELETE CASCADE
 	name
@@ -313,6 +313,7 @@ Quan hệ với các thực thể khác:
 Ghi chú thiết kế:
 * Khái niệm 'nhánh là con trỏ': Đây là sự khác biệt quan trọng với quan niệm thông thường. Khi tạo nhánh feature/new-login từ nhánh main, hệ thống không sao chép toàn bộ lịch sử commit của main — thay vào đó chỉ tạo một bản ghi mới với head_commit_hash trỏ đến commit hiện tại của main. Chi phí tạo nhánh là O(1) bất kể lịch sử lớn đến đâu.
 * Cập nhật con trỏ khi commit mới: Mỗi lần tạo commit mới (UC08) hoặc merge PR (UC19), trường head_commit_hash của nhánh được UPDATE sang commit mới nhất — đây là thao tác diễn ra trong cùng một Transaction với việc tạo commit.
+* Lưu trữ tên nhánh thay vì FK: Trong Pull Requests, `source_branch` và `target_branch` được lưu dưới dạng `VARCHAR` thay vì `FK` đến bảng `branches`. Đây là quyết định thiết kế có chủ ý: giúp bảo toàn lịch sử PR ngay cả khi nhánh vật lý đã bị xóa (delete branch) sau khi merge — một hành vi phổ biến trong quy trình Git.
 
 6. Thực thể ISSUES
 Mô tả:
@@ -325,17 +326,17 @@ Tên cột
 	Mô tả
 	Ràng buộc
 	id
-	SERIAL
-	Khóa chính tự tăng
-	PRIMARY KEY
+	UUID
+	Khóa chính (v4)
+	PRIMARY KEY, DEFAULT uuid_generate_v4()
 	repo_id
-	INT
+	UUID
 	Repository chứa issue này
 	NOT NULL, FK → repositories(id) ON DELETE CASCADE
 	author_id
-	INT
+	UUID
 	Người tạo issue (người báo cáo)
-	NOT NULL, FK → users(id) ON DELETE SET NULL
+	FK → users(id) ON DELETE SET NULL
 	title
 	VARCHAR(500)
 	Tiêu đề ngắn gọn mô tả vấn đề
@@ -396,17 +397,17 @@ Tên cột
 	Mô tả
 	Ràng buộc
 	id
-	SERIAL
-	Khóa chính tự tăng
-	PRIMARY KEY
+	UUID
+	Khóa chính (v4)
+	PRIMARY KEY, DEFAULT uuid_generate_v4()
 	repo_id
-	INT
+	UUID
 	Repository chứa pull request này
 	NOT NULL, FK → repositories(id) ON DELETE CASCADE
 	author_id
-	INT
+	UUID
 	Người tạo pull request
-	NOT NULL, FK → users(id) ON DELETE SET NULL
+	FK → users(id) ON DELETE SET NULL
 	title
 	VARCHAR(500)
 	Tiêu đề mô tả thay đổi trong PR
@@ -475,7 +476,7 @@ Tên cột
 	Mô tả
 	Ràng buộc
 	repo_id
-	INT
+	UUID
 	Khóa chính, tham chiếu trực tiếp đến repository
 	PRIMARY KEY, FK → repositories(id) ON DELETE CASCADE
 	commit_count

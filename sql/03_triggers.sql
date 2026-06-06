@@ -134,3 +134,21 @@ DROP TRIGGER IF EXISTS trg_branch_changes ON branches;
 CREATE TRIGGER trg_branch_changes
 AFTER INSERT OR DELETE ON branches
 FOR EACH ROW EXECUTE FUNCTION fn_update_stats_on_branch();
+
+-- 5. Ngăn tác giả PR tự approve PR của chính mình (business rule code review)
+CREATE OR REPLACE FUNCTION fn_check_self_review()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.reviewer_id = (
+        SELECT author_id FROM pull_requests WHERE id = NEW.pull_request_id
+    ) THEN
+        RAISE EXCEPTION 'Reviewer không thể là tác giả của Pull Request';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_prevent_self_review ON pull_request_reviews;
+CREATE TRIGGER trg_prevent_self_review
+BEFORE INSERT ON pull_request_reviews
+FOR EACH ROW EXECUTE FUNCTION fn_check_self_review();

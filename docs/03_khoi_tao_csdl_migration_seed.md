@@ -2,254 +2,93 @@
 
 ## 1. Mục đích tài liệu
 
-Tài liệu này mô tả các script dùng để khởi tạo cơ sở dữ liệu GitMini, bao gồm migration tạo bảng, tạo index, trigger, phân quyền, Row-Level Security và seed dữ liệu mẫu.
+Tài liệu này hướng dẫn chi tiết cách thiết lập môi trường cơ sở dữ liệu cho dự án GitMini. Nội dung bao gồm quy trình chạy các script Migration (Up/Down) để tạo cấu trúc bảng, thiết lập các ràng buộc, chỉ mục (index), trigger, phân quyền bảo mật và sinh dữ liệu mẫu (seed) để phục vụ việc demo và kiểm thử hiệu năng.
 
-Các script hiện có:
+## 2. Danh sách các script vận hành
 
-```text
-sql/00_down.sql
-sql/01_schema.sql
-sql/02_indexes.sql
-sql/03_triggers.sql
-sql/04_security_roles.sql
-sql/05_security_rls.sql
-sql/08_phase4_pr_governance.sql
-sql/09_extend_to_20_tables.sql
-sql/06_benchmark_queries.sql
-sql/07_analytics_queries.sql
-scripts/seed_data.py
+Hệ thống sử dụng các script SQL thuần để quản trị CSDL, đảm bảo tính minh bạch và dễ dàng kiểm soát trong PostgreSQL:
+
+*   `sql/00_down.sql`: Rollback toàn bộ cấu trúc CSDL.
+*   `sql/01_schema.sql`: Khởi tạo các extension và 11 bảng lõi của hệ thống.
+*   `sql/02_indexes.sql`: Thiết lập hệ thống chỉ mục tối ưu truy vấn.
+*   `sql/03_triggers.sql`: Cấu hình các trigger tự động cập nhật bảng thống kê.
+*   `sql/04_security_roles.sql`: Thiết lập vai trò người dùng (RBAC).
+*   `sql/05_security_rls.sql`: Kích hoạt bảo mật mức dòng (RLS).
+*   `sql/08_phase4_pr_governance.sql`: Bổ sung cơ chế quản trị Pull Request.
+*   `sql/09_extend_to_20_tables.sql`: Mở rộng schema lên 20 bảng hoàn thiện.
+*   `scripts/seed_data.py`: Script Python để sinh dữ liệu mẫu (Seeding).
+
+---
+
+## 3. Migration Up (Xây dựng cấu trúc 20 bảng CSDL)
+
+Hệ thống được thiết kế theo kiến trúc module, chia làm 2 giai đoạn khởi tạo chính để đảm bảo tính logic và toàn vẹn dữ liệu:
+
+### 3.1. Giai đoạn 1: Khởi tạo 11 bảng thực thể lõi (`sql/01_schema.sql`)
+Đây là những thực thể quan trọng nhất, tạo nên khung xương của một hệ thống quản lý mã nguồn:
+
+1.  **`users`**: Quản lý định danh. Lưu trữ thông tin tài khoản, mật khẩu (đã băm) và hồ sơ cá nhân. Đây là thực thể gốc để xác định quyền sở hữu và tác giả của mọi hành động trong hệ thống.
+2.  **`repositories`**: Thực thể trung tâm. Quản lý các dự án mã nguồn, thiết lập chế độ riêng tư (private/public) và định danh chủ sở hữu (owner).
+3.  **`repo_members`**: Quản lý phân quyền chi tiết. Cho phép mời nhiều người dùng vào một dự án với các vai trò khác nhau (Developer, Reviewer, Viewer), phục vụ luồng làm việc nhóm.
+4.  **`commits`**: Lưu trữ lịch sử mã nguồn. Mỗi bản ghi đại diện cho một "snapshot" trạng thái code tại một thời điểm, sử dụng mã băm SHA-1 (40 ký tự) làm khóa chính để đảm bảo tính duy nhất toàn cầu.
+5.  **`commit_parents`**: Mô hình hóa đồ thị DAG. Lưu quan hệ cha-con giữa các commit. Việc tách bảng này cho phép một commit có thể có nhiều cha (Merge Commit), giúp PostgreSQL truy vấn được toàn bộ lịch sử đệ quy bằng `WITH RECURSIVE`.
+6.  **`branches`**: Quản lý các nhánh phát triển. Bản chất là các con trỏ (pointer) trỏ đến commit mới nhất của từng nhánh, giúp người dùng làm việc song song trên nhiều tính năng mà không ảnh hưởng lẫn nhau.
+7.  **`issues`**: Theo dõi lỗi và yêu cầu. Hỗ trợ quy trình quản lý công việc, cho phép gắn nhãn (label) và giao việc cho các thành viên cụ thể.
+8.  **`pull_requests`**: Quản lý luồng hợp nhất code. Đây là nơi đề xuất thay đổi từ nhánh này sang nhánh khác, liên kết chặt chẽ với quy trình xét duyệt code.
+9.  **`pull_request_reviews`**: Kiểm soát chất lượng mã nguồn. Lưu trữ các phê duyệt (Approval) của Reviewer, là điều kiện bắt buộc trước khi một PR được phép merge vào các nhánh quan trọng.
+10. **`audit_logs`**: Nhật ký bảo mật. Ghi lại mọi hành động nhạy cảm như xóa repo, đổi quyền... phục vụ mục đích kiểm toán và truy vết sự cố.
+11. **`repo_stats`**: Tối ưu hóa hiệu năng Dashboard. Bảng này lưu trữ các số liệu tính toán sẵn (commit count, issue count) thông qua Trigger để Dashboard có thể hiển thị kết quả ngay lập tức mà không cần quét lại hàng triệu bản ghi.
+
+### 3.2. Giai đoạn 2: Mở rộng 9 bảng quản trị và vận hành (`sql/09_extend_to_20_tables.sql`)
+Nhóm bảng này hoàn thiện các tính năng chuyên sâu của một nền tảng Git hiện đại:
+
+12. **`file_blobs`**: Quản lý nội dung vật lý. Lưu trữ metadata và kích thước của các file mã nguồn. Sử dụng cơ chế hash nội dung để tránh lưu trùng lặp cùng một file nhiều lần.
+13. **`commit_files`**: Theo dõi thay đổi file. Ghi nhận chi tiết file nào được thêm mới, sửa đổi hoặc xóa bỏ trong từng commit cụ thể.
+14. **`repository_languages`**: Phân tích kỹ thuật. Thống kê tỷ lệ các ngôn ngữ lập trình trong dự án (ví dụ: 80% Python, 20% SQL), giúp người quản trị nắm bắt nhanh cấu trúc công nghệ.
+15. **`tags`**: Đánh dấu phiên bản. Lưu trữ các cột mốc quan trọng (ví dụ: v1.0, v2.0-release). Khác với branch, tag là các con trỏ cố định không thay đổi theo thời gian.
+16. **`releases`**: Quản lý phát hành sản phẩm. Gắn liền với Tag để cung cấp thông tin ghi chú phiên bản (release notes) và các file cài đặt cho người dùng cuối.
+17. **`issue_comments`**: Tương tác cộng tác. Cho phép các thành viên thảo luận, trao đổi ý kiến trực tiếp trên từng Issue.
+18. **`pull_request_comments`**: Đánh giá mã nguồn chi tiết. Hỗ trợ việc bình luận trực tiếp trên từng dòng code thay đổi trong Pull Request.
+19. **`ci_runs`**: Quản trị quy trình kiểm thử tự động. Ghi lại kết quả (Success/Failed) của các bản build CI/CD, giúp đảm bảo mã nguồn luôn ổn định trước khi merge.
+20. **`backup_jobs`**: Quản trị vận hành CSDL. Nhật ký ghi lại các phiên sao lưu và phục hồi dữ liệu thành công, đảm bảo hệ thống có khả năng phục hồi khi gặp sự cố.
+
+---
+
+## 4. Migration Down (Rollback)
+
+Khi cần reset môi trường hoặc sửa lại thiết kế, script `sql/00_down.sql` sẽ được thực hiện thủ công. Script này sẽ thực hiện lệnh `DROP` theo thứ tự ngược lại để xóa sạch các policy, trigger, function, bảng và role, đưa Database về trạng thái rỗng hoàn toàn.
+
+---
+
+## 5. Quy trình Seed dữ liệu mẫu (Data Seeding)
+
+Sau khi cấu trúc bảng đã sẵn sàng, chúng ta cần nạp dữ liệu để hệ thống có thể hoạt động. Dự án sử dụng script `scripts/seed_data.py` được tối ưu hóa bằng thư viện `psycopg2` để thực hiện insert theo lô (bulk insert), đảm bảo tốc độ ngay cả với dữ liệu lớn.
+
+### 5.1. Các kịch bản Seeding (Profiles)
+*   **Kịch bản Demo (`--profile demo`)**:
+    *   **Khối lượng**: 100 users, 20 repos, ~1,000 commits, 300 issues.
+    *   **Mục đích**: Phục vụ việc trình diễn giao diện Web Dashboard, biểu đồ commit và các tính năng tương tác cơ bản.
+    *   **Thời gian thực hiện**: ~5-10 giây.
+*   **Kịch bản Benchmark (`--profile benchmark`)**:
+    *   **Khối lượng**: 1,000 users, 1,000 repos, 100,000 commits, 10,000 issues.
+    *   **Mục đích**: Kiểm tra ngưỡng chịu tải của hệ thống, đo đạc hiệu quả của Index và EXPLAIN ANALYZE trên các câu lệnh truy vấn phức tạp (Recursive CTE, GIN search).
+    *   **Thời gian thực hiện**: ~2-5 phút tùy cấu hình máy.
+
+### 5.2. Cách thực hiện Seed
+Bạn cần mở Terminal tại thư mục gốc của dự án và chạy lệnh:
+```bash
+# Nạp dữ liệu nhẹ để demo
+python scripts/seed_data.py --profile demo
 ```
 
 ---
 
-## 2. Các đoạn lệnh khởi tạo (Migration Up/Down)
+## 6. Hướng dẫn khởi tạo và Triển khai chi tiết
 
-Hệ thống sử dụng cơ chế migration bằng script SQL thuần để đảm bảo tính minh bạch và dễ dàng kiểm soát trong PostgreSQL.
+Dưới đây là quy trình 4 bước để đưa hệ thống GitMini từ mã nguồn lên trạng thái hoạt động hoàn chỉnh.
 
-### 2.1. Migration Up (Khởi tạo và Cập nhật)
-Đây là các script dùng để xây dựng cấu trúc database từ đầu:
-
-| Thứ tự | Script | Mục đích |
-|---:|---|---|
-| 1 | `sql/01_schema.sql` | Khởi tạo extension `uuid-ossp` và 11 bảng lõi. |
-| 2 | `sql/02_indexes.sql` | Tạo hệ thống chỉ mục (B-tree, GIN) để tối ưu truy vấn. |
-| 3 | `sql/03_triggers.sql` | Thiết lập trigger tự động hóa cập nhật bảng phi chuẩn hóa. |
-| 4 | `sql/04_security_roles.sql` | Thiết lập RBAC (Role-based Access Control). |
-| 5 | `sql/05_security_rls.sql` | Kích hoạt và cấu hình Row-Level Security. |
-| 6 | `sql/08_phase4_pr_governance.sql` | Bổ sung cơ chế xét duyệt PR. |
-| 7 | `sql/09_extend_to_20_tables.sql` | Mở rộng schema lên 20 bảng hoàn thiện nghiệp vụ. |
-
-### 2.2. Migration Down (Rollback/Reset)
-Dùng để reset môi trường hoặc gỡ bỏ các thành phần đã cài đặt:
-
-| Script | Mục đích |
-|---|---|
-| `sql/00_down.sql` | Xóa toàn bộ policy, trigger, function, bảng, role và extension. |
-
----
-## 3. Seed dữ liệu mẫu (Seeding)
-Sau khi khởi tạo cấu trúc, hệ thống cung cấp script Python để sinh dữ liệu thực tế, phục vụ demo và đo đạc hiệu năng.
-
-*   **Script:** `scripts/seed_data.py`
-*   **Chế độ `demo`:** Sinh ~1,000 commit, ~300 issue (chạy nhanh).
-*   **Chế độ `benchmark`:** Sinh ~100,000 commit, ~10,000 issue (đo hiệu năng).
-
----
-## 4. Minh chứng thực tế chạy script
-
-Migration up là quá trình tạo hoặc cập nhật cấu trúc CSDL từ trạng thái rỗng lên trạng thái có thể sử dụng.
-
-### 3.1. `sql/01_schema.sql` — Tạo schema chính
-
-Script này thực hiện:
-
-- Bật extension `uuid-ossp`.
-- Tạo bảng `users`.
-- Tạo bảng `repositories`.
-- Tạo bảng `commits`.
-- Tạo bảng `commit_parents`.
-- Tạo bảng `branches`.
-- Tạo bảng `issues`.
-- Tạo bảng `pull_requests`.
-- Tạo bảng `pull_request_reviews`.
-- Tạo bảng `audit_logs`.
-- Tạo bảng `repo_stats`.
-
-Các loại ràng buộc được dùng:
-
-- `PRIMARY KEY`
-- `FOREIGN KEY`
-- `UNIQUE`
-- `CHECK`
-- `DEFAULT`
-- `ON DELETE CASCADE`
-- `ON DELETE SET NULL`
-
-### 3.2. `sql/02_indexes.sql` — Tạo chỉ mục
-
-Script này tạo các nhóm index:
-
-- Index cho khóa ngoại để tăng tốc `JOIN`.
-- Composite index cho các truy vấn phổ biến.
-- GIN index cho full-text search.
-- Index phụ trợ cho dashboard.
-
-Ví dụ:
-
-```sql
-CREATE INDEX IF NOT EXISTS idx_commits_repo_time
-ON commits(repo_id, created_at DESC);
-```
-
-Index này phục vụ truy vấn lấy lịch sử commit mới nhất của một repository.
-
-### 3.3. `sql/03_triggers.sql` — Tạo trigger và function
-
-Script này tạo các function và trigger tự động cập nhật bảng `repo_stats`.
-
-Các trigger chính:
-
-| Trigger | Bảng | Mục đích |
-|---|---|---|
-| `trg_init_stats_on_repo_create` | `repositories` | Tạo bản ghi `repo_stats` khi tạo repo |
-| `trg_commit_changes` | `commits` | Cập nhật số commit và commit mới nhất |
-| `trg_issue_changes` | `issues` | Cập nhật số issue mở/đóng |
-| `trg_pr_changes` | `pull_requests` | Cập nhật số PR mở/đã merge |
-| `trg_branch_changes` | `branches` | Cập nhật số branch |
-
-### 3.4. `sql/04_security_roles.sql` — Tạo RBAC
-
-Script này tạo các role:
-
-- `git_admin`
-- `git_developer`
-- `git_reviewer`
-
-Ý nghĩa:
-
-| Role | Mục đích |
-|---|---|
-| `git_admin` | Quản trị toàn bộ hệ thống |
-| `git_developer` | Tạo commit, issue, branch và xem dữ liệu |
-| `git_reviewer` | Kế thừa developer và có quyền cập nhật pull request |
-
-### 3.5. `sql/05_security_rls.sql` — Tạo Row-Level Security
-
-Script này bật RLS trên các bảng quan trọng:
-
-- `repositories`
-- `repo_members`
-- `commits`
-- `issues`
-- `pull_requests`
-
-Mục tiêu là hạn chế truy cập dữ liệu theo từng dòng. Ví dụ repository private chỉ chủ sở hữu hoặc thành viên được xem.
-
-### 3.6. `sql/08_phase4_pr_governance.sql` — Tạo bảng review PR
-
-Script này đảm bảo bảng `pull_request_reviews` và index liên quan tồn tại để phục vụ chính sách protected branch: PR muốn merge vào nhánh bảo vệ phải có approval hợp lệ.
-
-### 3.7. `sql/09_extend_to_20_tables.sql` — Mở rộng schema lên 20 bảng
-
-Script này bổ sung 9 bảng:
-
-- `file_blobs`
-- `commit_files`
-- `repository_languages`
-- `tags`
-- `releases`
-- `issue_comments`
-- `pull_request_comments`
-- `ci_runs`
-- `backup_jobs`
-
-Các bảng này giúp báo cáo thể hiện rõ hơn phần quản trị dữ liệu mã nguồn: file/blob, tag/release, comment, CI và lịch sử backup/restore.
-
----
-
-## 4. Migration Down
-
-Migration down là quá trình rollback, đưa CSDL về trạng thái trước khi chạy migration.
-
-Project đã bổ sung file migration down:
-
-```text
-sql/00_down.sql
-```
-
-Script này dùng để reset môi trường development/test bằng cách gỡ policy, trigger, function, bảng, role và extension liên quan tới GitMini.
-
-Lưu ý: `00_down.sql` không được tự động chạy khi khởi tạo Docker. File này chỉ chạy thủ công khi cần rollback/reset database.
-
----
-
-## 5. Seed dữ liệu
-
-### 5.1. Script seed hiện tại
-
-Script seed hiện có:
-
-```text
-scripts/seed_data.py
-```
-
-Script sử dụng:
-
-- `psycopg2` để kết nối PostgreSQL.
-- `execute_values` để insert theo lô.
-- `uuid` để tạo UUID.
-- `random` để sinh dữ liệu mẫu.
-- `dotenv` để đọc biến môi trường `DATABASE_URL`.
-
-### 5.2. Chế độ seed hiện tại
-
-Script hiện hỗ trợ hai profile:
-
-| Profile | Users | Repositories | Commits | Issues | Pull requests | Mục đích |
-|---|---:|---:|---:|---:|---:|---|
-| `demo` | 100 | 20 | 1,000 | 300 | 80 | Chạy nhanh để minh họa giao diện |
-| `benchmark` | 1,000 | 1,000 | 100,000 | 10,000 | 2,000 | Tạo dữ liệu lớn để đo `EXPLAIN ANALYZE` |
-
-### 5.3. Dữ liệu được sinh
-
-Script hiện tạo dữ liệu cho toàn bộ schema 20 bảng, bao gồm:
-
-- `users`
-- `repositories`
-- `repo_members`
-- `commits`
-- `commit_parents`
-- `branches`
-- `issues`
-- `pull_requests`
-- `file_blobs`
-- `commit_files`
-- `repository_languages`
-- `tags`
-- `releases`
-- `issue_comments`
-- `pull_request_comments`
-- `ci_runs`
-- `backup_jobs`
-
-Dữ liệu branch gồm các nhánh mẫu:
-
-- `main`
-- `develop`
-- `feature/login`
-- `feature/search`
-- `bugfix/dashboard`
-
-Dữ liệu issue và commit message có các keyword như `login bug`, `full text search`, `dashboard slow`, `fix login flow` để phục vụ benchmark full-text search.
-
----
-
-## 6. Hướng dẫn khởi tạo CSDL
-
-### 6.1. Chuẩn bị biến môi trường
-
-Tạo file `.env` từ `.env.example`:
-
+### Bước 1: Cấu hình biến môi trường
+Hệ thống đọc thông tin kết nối từ file `.env`. Bạn hãy tạo file `.env` tại thư mục gốc với nội dung sau:
 ```text
 DATABASE_URL=postgresql://gitmini_user:gitmini_password@localhost:5435/gitmini_db
 DB_HOST=localhost
@@ -258,41 +97,55 @@ DB_NAME=gitmini_db
 DB_USER=gitmini_user
 DB_PASS=gitmini_password
 ```
+*Giải thích: `5435` là cổng kết nối từ máy bạn vào database bên trong Docker.*
 
-### 6.2. Khởi động PostgreSQL bằng Docker
-
+### Bước 2: Khởi động hạ tầng với Docker Compose
+Sử dụng Docker giúp môi trường CSDL được cô lập hoàn toàn, không gây xung đột với các phần mềm khác trên máy.
 ```bash
 docker compose up -d db
 ```
+*   **`-d`**: Chạy dưới nền (detached mode).
+*   **`db`**: Chỉ khởi động dịch vụ PostgreSQL.
+*   **Cơ chế lưu trữ**: Dữ liệu được ánh xạ (mount) vào volume `postgres_data` để đảm bảo khi tắt Docker dữ liệu không bị mất.
 
-Database trong `docker-compose.yml` đang expose cổng:
-
-```text
-localhost:5435 -> container:5432
-```
-
-### 6.3. Chạy seed
-
-Chạy seed demo:
-
+### Bước 3: Cài đặt môi trường Python (Dành cho script vận hành)
+Để chạy các script seed dữ liệu và kiểm tra, bạn cần cài đặt các thư viện kết nối PostgreSQL:
 ```bash
-python scripts/seed_data.py --profile demo
-```
-
-Chạy seed benchmark:
-
-```bash
-python scripts/seed_data.py --profile benchmark
-```
-
-Yêu cầu cài thư viện Python:
-
-```bash
+# Cập nhật pip và cài đặt thư viện
 pip install psycopg2-binary python-dotenv
+```
+
+### Bước 4: Thực thi Migration và Kiểm tra
+Thông thường Docker sẽ tự động nạp các file trong thư mục `sql/` khi khởi tạo lần đầu. Tuy nhiên, nếu bạn muốn thực hiện thủ công hoặc cập nhật schema, hãy dùng lệnh:
+```bash
+# Truy cập vào container và chạy psql (Ví dụ nạp schema mở rộng)
+docker exec -i gitmini_db_container psql -U gitmini_user -d gitmini_db < sql/09_extend_to_20_tables.sql
+```
+
+**Cách kiểm tra hệ thống đã sẵn sàng:**
+Mở công cụ quản lý CSDL (như DBeaver, pgAdmin) hoặc dùng dòng lệnh để kiểm tra số lượng bảng:
+```sql
+-- Kiểm tra tổng số bảng (Phải ra kết quả 20)
+SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';
+
+-- Kiểm tra một vài bảng quan trọng
+SELECT * FROM repositories LIMIT 5;
+SELECT * FROM repo_stats;
 ```
 
 ---
 
-## 7. Kết luận
+---
 
-Project đã có migration up/down, benchmark query và seed script hỗ trợ cả demo mode lẫn benchmark mode. Sau khi chạy `--profile benchmark`, có thể dùng `sql/06_benchmark_queries.sql` để lấy số liệu `EXPLAIN ANALYZE` điền vào tài liệu minh chứng tối ưu.
+## 7. Minh chứng khởi tạo thực tế
+
+Dưới đây là hình ảnh kiểm tra trực tiếp từ Database sau khi thực hiện chạy các file SQL khởi tạo, xác nhận cấu trúc 20 bảng đã được tạo lập thành công:
+
+*(Chèn ảnh kết quả lệnh \dt vào đây)*
+![Danh sách 20 bảng](../screenshots/03_tables_list.png)
+
+---
+
+## 8. Kết luận
+
+Với hệ thống script đầy đủ từ khởi tạo đến seed dữ liệu lớn, project GitMini đảm bảo khả năng tái lập môi trường cực kỳ nhanh chóng. Việc sử dụng UUID làm khóa chính và Trigger để cập nhật thống kê giúp hệ thống vừa hiện đại, vừa đảm bảo tính nhất quán dữ liệu trong môi trường đa người dùng.

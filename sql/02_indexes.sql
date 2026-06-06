@@ -34,8 +34,11 @@ CREATE INDEX IF NOT EXISTS idx_pr_repo_status ON pull_requests(repo_id, status);
 
 -- 3. Chỉ mục Tìm kiếm toàn văn (Full-text Search - GIN Index)
 -- Tối ưu hóa tìm kiếm Issue theo tiêu đề và nội dung
-CREATE INDEX IF NOT EXISTS idx_issues_search 
-ON issues USING GIN (to_tsvector('english', title || ' ' || body));
+-- Index trên generated column search_vector (STORED) — không recompute expression khi query,
+-- nhanh hơn expression index đặc biệt khi dữ liệu lớn và thường xuyên UPDATE.
+DROP INDEX IF EXISTS idx_issues_search;
+CREATE INDEX IF NOT EXISTS idx_issues_search
+    ON issues USING GIN (search_vector);
 
 -- Tối ưu hóa tìm kiếm Commit theo nội dung message
 CREATE INDEX IF NOT EXISTS idx_commits_message_search 

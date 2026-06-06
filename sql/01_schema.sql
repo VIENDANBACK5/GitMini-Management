@@ -89,6 +89,14 @@ CREATE TABLE IF NOT EXISTS issues (
     closed_at TIMESTAMPTZ
 );
 
+-- Full-text search: generated column được tính sẵn và lưu vật lý (STORED),
+-- index GIN không cần recompute expression khi truy vấn → nhanh hơn expression index.
+ALTER TABLE issues
+    ADD COLUMN IF NOT EXISTS search_vector tsvector
+    GENERATED ALWAYS AS (
+        to_tsvector('english', title || ' ' || COALESCE(body, ''))
+    ) STORED;
+
 -- 7. Bảng PULL_REQUESTS: Yêu cầu hợp nhất mã nguồn
 CREATE TABLE IF NOT EXISTS pull_requests (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -142,3 +150,14 @@ CREATE TABLE IF NOT EXISTS repo_stats (
     latest_commit_msg TEXT,
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Constraint updates for completeness
+-- Mở rộng trạng thái review: approved, changes_requested, commented
+ALTER TABLE pull_request_reviews
+    DROP CONSTRAINT IF EXISTS pull_request_reviews_status_check;
+ALTER TABLE pull_request_reviews
+    ADD CONSTRAINT pull_request_reviews_status_check
+    CHECK (status IN ('approved', 'changes_requested', 'commented'));
+
+-- backup_jobs.job_type constraint được mở rộng trong 09_extend_to_20_tables.sql
+-- (backup_jobs được tạo ở file đó, không thể ALTER ở đây)

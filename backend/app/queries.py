@@ -10,7 +10,7 @@ REPO_CAPABILITY_FIELDS = """
     END AS current_user_role,
     (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner', 'maintainer', 'developer', 'reviewer')) AS can_create_issue,
     (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner', 'maintainer', 'developer')) AS can_create_pull,
-    (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner', 'maintainer')) AS can_update,
+    (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner')) AS can_update,
     (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner', 'maintainer')) AS can_merge
 """
 
@@ -116,7 +116,7 @@ WITH RECURSIVE repo_target AS (
             SELECT b.head_commit_hash
             FROM branches b
             JOIN repo_target rt ON rt.id = b.repo_id
-            WHERE b.name = rt.default_branch
+            WHERE b.name = COALESCE(%s, rt.default_branch)
             LIMIT 1
         ),
         (
@@ -197,7 +197,7 @@ SELECT
         WHEN r.owner_id = %s THEN 'owner'
         ELSE current_member.role
     END AS current_user_role,
-    (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner', 'maintainer')) AS can_update
+    (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner', 'maintainer', 'developer', 'reviewer')) AS can_update
 FROM issues i
 JOIN repositories r ON r.id = i.repo_id
 LEFT JOIN repo_members current_member ON current_member.repo_id = r.id AND current_member.user_id = %s
@@ -231,7 +231,7 @@ WITH pull_rows AS (
             WHEN r.owner_id = %s THEN 'owner'
             ELSE current_member.role
         END AS current_user_role,
-        (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner', 'maintainer')) AS can_update,
+        (%s = 'admin' OR r.owner_id = %s OR current_member.role IN ('owner', 'maintainer', 'developer')) AS can_update,
         COALESCE(target_branch.is_protected, FALSE) AS target_branch_protected,
         COALESCE(review_stats.approval_count, 0) AS approval_count
     FROM pull_requests pr
@@ -289,15 +289,11 @@ WITH target_repo AS (
         i.status AS status,
         r.name AS repo,
         i.created_at,
-        ts_rank(
-            to_tsvector('english', i.title || ' ' || i.body),
-            plainto_tsquery('english', %s)
-        ) AS rank
+        ts_rank(i.search_vector, plainto_tsquery('english', %s)) AS rank
     FROM issues i
     JOIN target_repo tr ON tr.id = i.repo_id
     JOIN repositories r ON r.id = i.repo_id
-    WHERE to_tsvector('english', i.title || ' ' || i.body)
-          @@ plainto_tsquery('english', %s)
+    WHERE i.search_vector @@ plainto_tsquery('english', %s)
 ), commit_results AS (
     SELECT
         'commit' AS type,
@@ -447,6 +443,22 @@ WITH visible_repos AS (
     FROM repositories r
     LEFT JOIN repo_members current_member ON current_member.repo_id = r.id AND current_member.user_id = %s
     WHERE %s = 'admin' OR r.is_private = FALSE OR r.owner_id = %s OR current_member.user_id IS NOT NULL
+), repo_results AS (
+    SELECT
+        'repository' AS type,
+        r.id::text AS id,
+        NULL::text AS hash,
+        r.name AS title,
+        r.description AS body,
+        NULL::text AS message,
+        'active' AS status,
+        r.name AS repo,
+        r.created_at,
+        ts_rank(to_tsvector('english', r.name || ' ' || COALESCE(r.description, '')), plainto_tsquery('english', %s)) AS rank
+    FROM repositories r
+    JOIN visible_repos vr ON vr.id = r.id
+    WHERE to_tsvector('english', r.name || ' ' || COALESCE(r.description, '')) @@ plainto_tsquery('english', %s)
+       OR r.name ILIKE '%%' || %s || '%%'
 ), issue_results AS (
     SELECT
         'issue' AS type,
@@ -458,15 +470,12 @@ WITH visible_repos AS (
         i.status AS status,
         r.name AS repo,
         i.created_at,
-        ts_rank(
-            to_tsvector('english', i.title || ' ' || i.body),
-            plainto_tsquery('english', %s)
-        ) AS rank
+        ts_rank(i.search_vector, plainto_tsquery('english', %s)) AS rank
     FROM issues i
     JOIN visible_repos vr ON vr.id = i.repo_id
     JOIN repositories r ON r.id = i.repo_id
-    WHERE to_tsvector('english', i.title || ' ' || i.body)
-          @@ plainto_tsquery('english', %s)
+    WHERE i.search_vector @@ plainto_tsquery('english', %s)
+       OR i.title ILIKE '%%' || %s || '%%'
 ), commit_results AS (
     SELECT
         'commit' AS type,
@@ -478,18 +487,17 @@ WITH visible_repos AS (
         'commit' AS status,
         r.name AS repo,
         c.created_at,
-        ts_rank(
-            to_tsvector('english', c.message),
-            plainto_tsquery('english', %s)
-        ) AS rank
+        ts_rank(to_tsvector('english', c.message), plainto_tsquery('english', %s)) AS rank
     FROM commits c
     JOIN visible_repos vr ON vr.id = c.repo_id
     JOIN repositories r ON r.id = c.repo_id
-    WHERE to_tsvector('english', c.message)
-          @@ plainto_tsquery('english', %s)
+    WHERE to_tsvector('english', c.message) @@ plainto_tsquery('english', %s)
+       OR c.message ILIKE '%%' || %s || '%%'
 )
 SELECT *
 FROM (
+    SELECT * FROM repo_results
+    UNION ALL
     SELECT * FROM issue_results
     UNION ALL
     SELECT * FROM commit_results
